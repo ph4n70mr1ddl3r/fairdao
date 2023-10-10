@@ -3,12 +3,12 @@
 
 pragma solidity ^0.8.20;
 
-import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
-import {ERC20Upgradeable} from "../ERC20Upgradeable.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {EIP712Upgradeable} from "../../../utils/cryptography/EIP712Upgradeable.sol";
-import {NoncesUpgradeable} from "../../../utils/NoncesUpgradeable.sol";
-import {Initializable} from "../../../proxy/utils/Initializable.sol";
+import {IERC20Permit} from "IERC20Permit.sol";
+import {ERC20Upgradeable} from "ERC20Upgradeable.sol";
+import {ECDSA} from "ECDSA.sol";
+import {EIP712Upgradeable} from "EIP712Upgradeable.sol";
+import {NoncesUpgradeable} from "NoncesUpgradeable.sol";
+import {Initializable} from "Initializable.sol";
 
 /**
  * @dev Implementation of the ERC20 Permit extension allowing approvals to be made via signatures, as defined in

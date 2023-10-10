@@ -3,10 +3,10 @@
 
 pragma solidity ^0.8.20;
 
-import {ERC20Upgradeable} from "../ERC20Upgradeable.sol";
-import {VotesUpgradeable} from "../../../governance/utils/VotesUpgradeable.sol";
-import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
-import {Initializable} from "../../../proxy/utils/Initializable.sol";
+import {ERC20Upgradeable} from "ERC20Upgradeable.sol";
+import {VotesUpgradeable} from "VotesUpgradeable.sol";
+import {Checkpoints} from "Checkpoints.sol";
+import {Initializable} from "Initializable.sol";
 
 /**
  * @dev Extension of ERC20 to support Compound-like voting and delegation. This version is more generic than Compound's,
