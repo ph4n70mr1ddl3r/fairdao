@@ -6,6 +6,43 @@
 
 ---
 
+## Table of Contents
+
+- [Abstract](#abstract)
+- [1. Vision: FairDAO as the Primary Object](#1-vision-fairdao-as-the-primary-object)
+  - [1.1 DAO‑First, Not Token‑First](#11-dao-first-not-token-first)
+  - [1.2 The Whitelist as a Membership Universe](#12-the-whitelist-as-a-membership-universe)
+  - [1.3 FAIR's Three Roles](#13-fairs-three-roles)
+- [2. Architecture Overview](#2-architecture-overview)
+  - [2.1 Governance vs Hard Invariants](#21-governance-vs-hard-invariants)
+- [3. Whitelist‑Native Onboarding into FairDAO](#3-whitelist-native-onboarding-into-fairdao)
+  - [3.1 Eligibility and Merkle Root](#31-eligibility-and-merkle-root)
+  - [3.2 One‑Time Claim and DAO Entry](#32-one-time-claim-and-dao-entry)
+  - [3.3 Gating Claims on ETH Liquidity](#33-gating-claims-on-eth-liquidity)
+  - [3.4 Bootstrap Roots (First 100 Claimants)](#34-bootstrap-roots-first-100-claimants)
+- [4. Referral System as Discovery Mechanism](#4-referral-system-as-discovery-mechanism)
+  - [4.1 Fixed Invite Slots per Member](#41-fixed-invite-slots-per-member)
+  - [4.2 Mutual‑Signature Invite Pairs](#42-mutual-signature-invite-pairs)
+  - [4.3 Four‑Level Referral Rewards](#43-four-level-referral-rewards)
+  - [4.4 Referral System as DAO Outreach](#44-referral-system-as-dao-outreach)
+- [5. FAIR/ETH AMM as the DAO's Liquidity Commons](#5-faireth-amm-as-the-daos-liquidity-commons)
+  - [5.1 Constant‑Product AMM with Non‑Withdrawable Core](#51-constant-product-amm-with-non-withdrawable-core)
+  - [5.2 Bootstrapping and ETH Donations](#52-bootstrapping-and-eth-donations)
+  - [5.3 Swap Fee and Fee Split](#53-swap-fee-and-fee-split)
+  - [5.4 AMM as Entry and Exit for Governance](#54-amm-as-entry-and-exit-for-governance)
+- [6. Governance: FAIR as the Governance Token](#6-governance-fair-as-the-governance-token)
+  - [6.1 Basic Model](#61-basic-model)
+  - [6.2 What Governance Controls](#62-what-governance-controls)
+  - [6.3 What Governance Cannot Do](#63-what-governance-cannot-do)
+  - [6.4 Fair Representation and Evolution](#64-fair-representation-and-evolution)
+- [7. Security and Assumptions (High Level)](#7-security-and-assumptions-high-level)
+- [8. Roadmap (Informative)](#8-roadmap-informative)
+- [9. Conclusion](#9-conclusion)
+- [10. Glossary](#10-glossary)
+- [11. Technical Specifications](#11-technical-specifications)
+
+---
+
 ## Abstract
 
 FairDAO is a governance DAO designed first and foremost as a **home for Ethereum users**, not as a speculative token experiment. The core object of the system is the **DAO itself**, and the FAIR token is its **governance token**. Everything else in the protocol — the distribution mechanism, the Ethereum‑native whitelist, the automated market maker, and the referral system — exists only to **onboard members fairly**, give them **liquidity**, and **reach as many eligible users as possible**.
@@ -190,6 +227,29 @@ To avoid privileging any single “founder” address, FairDAO uses a **multi‑
 
 This creates **up to 100 root nodes** in the invite forest — a broad set of initial FairDAO members seeded directly from the whitelist, without any special founder allocation.
 
+**Invite Forest Structure:**
+
+```
+                  [Bootstrap Root 1]
+                  /   |   |   \
+               [1a]  [1b] [1c] [1d]  (4 slots)
+                /  \
+             [1a1] [1a2] ...
+                  |
+                [1a2a] ...
+                  |
+                [1a2a1] ...
+
+                  [Bootstrap Root 2]
+                  /   |   |   \
+               [2a]  [2b] [2c] [2d]
+
+                  ...
+
+Max depth: 4 levels of rewards
+Max children: 4 per node
+```
+
 ---
 
 ## 4. Referral System as Discovery Mechanism
@@ -278,9 +338,25 @@ The FAIR/ETH AMM is the **economic interface** between FairDAO and the rest of t
 
 The AMM is a simple constant‑product pool:
 
-- Balances: `X` ETH and `Y` FAIR.  
-- Invariant: `X · Y = k`, between state‑transition events.  
+- Balances: `X` ETH and `Y` FAIR.
+- Invariant: `X · Y = k`, between state‑transition events.
 - Price: `P_FAIR(ETH) = X / Y` on the marginal trade.
+
+**Mathematical Formulation:**
+
+```
+Initial state:  (X₀, Y₀)
+After swap:    (X₁, Y₁)
+Invariant:      X₀ · Y₀ = k = X₁ · Y₁
+
+Swap ETH for FAIR:
+  amountIn = ΔX
+  amountOut = Y₀ - (k / (X₀ + ΔX))
+
+Swap FAIR for ETH:
+  amountIn = ΔY
+  amountOut = X₀ - (k / (Y₀ + ΔY))
+```
 
 Crucially, the core liquidity is **non‑withdrawable**:
 
@@ -294,9 +370,30 @@ This makes the AMM a kind of **“liquidity commons”** owned collectively by t
 
 At deployment, `X = Y = 0`. Claims are disabled until some ETH is donated:
 
-1. A donor (possibly the deployer) sends ETH to the AMM.  
-2. Once `X > 0`, claims are enabled.  
+1. A donor (possibly the deployer) sends ETH to the AMM.
+2. Once `X > 0`, claims are enabled.
 3. As claims occur, FAIR starts to flow into the AMM from the 6–10 FAIR per‑claim donation, and a live FAIR/ETH price emerges.
+
+**AMM State Flow:**
+
+```
+DEPLOYMENT:
+  ETH: 0     FAIR: 0     k: 0     [CLAIMS DISABLED]
+
+INITIAL DONATION:
+  ETH: 100   FAIR: 0     k: 0     [CLAIMS ENABLED]
+
+AFTER 100 CLAIMS (bootstrap):
+  ETH: 100   FAIR: 1000  k: 100,000  (10 FAIR to AMM each)
+
+AFTER 10,000 CLAIMS:
+  ETH: 100   FAIR: 100,000  k: 10,000,000
+  Price: 0.001 ETH/FAIR
+
+AFTER SWAP ACTIVITY:
+  ETH: 150   FAIR: 75,000   k: 11,250,000 (k grows from fees)
+  Price: 0.002 ETH/FAIR
+```
 
 ETH donations are **pure contributions** — the donor receives no LP token, only indirect benefits from a more liquid governance token and a healthier DAO.
 
@@ -384,11 +481,26 @@ If new versions or extensions are launched, they will be **opt‑in**: FAIR hold
 
 Because the initial distribution is one‑per‑whitelisted address, FairDAO starts with a broadly dispersed set of governance rights. Over time:
 
-- Some claimants will sell, concentrating FAIR.  
-- Some buyers will accumulate FAIR and become large voters.  
+- Some claimants will sell, concentrating FAIR.
+- Some buyers will accumulate FAIR and become large voters.
 - The DAO may introduce additional mechanisms (e.g., delegation incentives, quadratic weighting on certain decisions, or non‑binding signaling) to maintain a balance between expertise and decentralization.
 
 Those choices are themselves governance decisions — but they are **made by FAIR holders**, not by a pre‑mine or off‑chain committee.
+
+### 6.5 Deployment Checklist
+
+Before mainnet deployment, verify:
+
+- [ ] Merkle root is correctly computed from full whitelist
+- [ ] FAIR token has correct initial supply (0, minted via claims)
+- [ ] AMM has non-withdrawable core liquidity (no LP tokens)
+- [ ] Fee splits are correctly implemented (0.1%/0.1%/0.1%)
+- [ ] Claim window start time is set appropriately
+- [ ] Governance timelock is configured (recommended: 48 hours)
+- [ ] Emergency pause functionality is available and tested
+- [ ] All contracts have been audited by at least two independent firms
+- [ ] Testnet deployment completed with successful dry run
+- [ ] Off-chain infrastructure (Merkle proof serving) is operational
 
 ---
 
@@ -416,6 +528,40 @@ FairDAO’s design rests on several assumptions:
    - The bounded referral system and fee design are tuned under this assumption.
 
 A deeper formal analysis — including invite‑forest growth, liquidity dynamics, and governance game theory — is left for future work and independent research.
+
+### 7.1 Key Security Considerations
+
+#### Merkle Proof Validation
+- Ensure proofs cannot be reused across different addresses
+- Verify chain ID to prevent replay attacks
+- Include claim contract address in signed messages
+
+#### Invite System Security
+- Validate that signatures are from expected parties
+- Prevent nonce reuse in invite pairs
+- Ensure invite slots cannot be transferred or sold
+
+#### AMM Safety
+- Prevent integer overflow/underflow in calculations
+- Ensure minimum output amounts are respected
+- Protect against flash loan attacks (though non-withdrawable core mitigates this)
+
+#### Reentrancy Protection
+- All state-changing functions should be nonReentrant
+- Use Checks-Effects-Interactions pattern
+- Validate state before external calls
+
+### 7.2 Edge Cases and Fail Conditions
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| Claim when AMM has 0 ETH | Transaction reverts with `NoLiquidity()` error |
+| Duplicate claim attempt | Transaction reverts with `AlreadyClaimed()` error |
+| Invalid Merkle proof | Transaction reverts with `InvalidProof()` error |
+| Expired invite deadline | Transaction reverts with `InviteExpired()` error |
+| Reused invite pair | Transaction reverts with `InviteAlreadyUsed()` error |
+| Swap results in zero output | Transaction reverts with `InsufficientOutput()` error |
+| Slippage exceeded | Transaction reverts with `SlippageExceeded()` error |
 
 ---
 
@@ -459,3 +605,188 @@ FairDAO is a **DAO‑first** protocol. Instead of treating governance as an afte
 - Above all, **FAIR is the governance token**: whoever holds FAIR participates in steering the protocol, within constraints designed to protect the core fairness guarantees.
 
 In this way, FairDAO aims to become a **governance home for millions of Ethereum users**, grounded in real on‑chain activity, fairness of access, and a transparent, immutable economic base.
+
+---
+
+## 10. Glossary
+
+| Term | Definition |
+|------|------------|
+| **AMM** | Automated Market Maker - a type of decentralized exchange protocol that relies on a mathematical formula to price assets |
+| **DAO** | Decentralized Autonomous Organization - an organization represented by rules encoded as a computer program |
+| **EOA** | Externally Owned Account - an Ethereum account controlled by a private key, not a smart contract |
+| **FAIR** | The native governance token of FairDAO |
+| **k** | The constant product invariant in an AMM (X · Y = k) |
+| **Merkle Proof** | A cryptographic proof that a value is part of a Merkle tree |
+| **Merkle Root** | The root hash of a Merkle tree containing all whitelisted addresses |
+| **MLM** | Multi-Level Marketing - a marketing strategy where the sales force is compensated not only for sales they generate but also for the sales of the other salespeople they recruit |
+| **N_boot** | Number of bootstrap claimants (100) |
+| **Whitelist** | The set of 64,846,015 Ethereum addresses eligible to claim FAIR |
+
+---
+
+## 11. Technical Specifications
+
+### 11.1 Data Structures
+
+#### Merkle Tree for Whitelist
+```
+struct WhitelistInfo {
+    bytes32 merkleRoot;          // Root of the whitelist Merkle tree
+    uint256 totalAddresses;      // 64,846,015
+    uint256 minGasPaid;          // 0.004 ETH
+    uint256 endBlock;            // 23,000,000
+}
+```
+
+#### Invite Tree Structure
+```
+struct InviteNode {
+    address inviter;
+    address invitee;
+    uint8 level;                 // 0-3 (4 levels)
+    uint256 slotIndex;           // 0-3 (4 slots per inviter)
+    bool claimed;
+}
+
+mapping(address => InviteNode[]) public inviteTree;
+mapping(address => uint256) public inviteSlotsUsed;
+```
+
+#### AMM State
+```
+struct AMMState {
+    uint256 ethBalance;          // X
+    uint256 fairBalance;         // Y
+    uint256 k;                   // X * Y constant
+    uint256 feeBasisPoints;      // 30 = 0.3%
+    uint256 poolFeeShare;        // 10 = 0.1%
+    uint256 burnFeeShare;        // 10 = 0.1%
+    uint256 devFeeShare;         // 10 = 0.1%
+}
+```
+
+### 11.2 Key Constants
+
+```
+uint256 constant FAIR_PER_CLAIM = 100;
+uint256 constant CLAIMANT_SHARE = 90;
+uint256 constant REFERRAL_BUDGET = 4;
+uint256 constant AMM_BASE_SHARE = 6;
+uint256 constant BOOTSTRAP_COUNT = 100;
+uint256 constant INVITE_SLOTS_PER_MEMBER = 4;
+uint256 constant MAX_REFERRAL_LEVELS = 4;
+uint256 constant SWAP_FEE_BASIS_POINTS = 30;  // 0.3%
+```
+
+### 11.3 Core Functions
+
+#### Claim FAIR
+```
+function claim(
+    bytes32[] calldata merkleProof,
+    address inviter,
+    uint256 slotIndex,
+    bytes calldata sigInviter,
+    bytes calldata sigInvitee
+) external nonReentrant whenNotPaused
+```
+
+**Requirements:**
+- Address must be in whitelist (verified via Merkle proof)
+- AMM must have ETH balance > 0
+- Address must not have claimed before
+- If not in first 100 claimants: valid invite signatures required
+
+#### Swap in AMM
+```
+function swap(
+    bool ethIn,  // true if swapping ETH for FAIR
+    uint256 amountIn,
+    uint256 amountOutMin
+) external nonReversible
+```
+
+**Formula:**
+```
+amountOut = amountIn * (balanceOther - fee) / (balanceThis + amountIn)
+```
+
+#### Donate ETH to AMM
+```
+function donate() external payable
+```
+
+Enables claims by providing initial ETH liquidity.
+
+### 11.4 Invite Message Format (EIP-712)
+
+```
+struct InviteMessage {
+    address inviter;
+    address invitee;
+    address claimContract;
+    uint256 chainId;
+    uint256 slotIndex;
+    uint256 deadline;
+}
+```
+
+The message is signed by both inviter and invitee before submission.
+
+### 11.5 Fee Distribution
+
+For a swap of `amountIn`:
+```
+totalFee = amountIn * 30 / 10000          // 0.3%
+poolFee = totalFee / 3                    // 0.1% - added to pool
+burnAmount = totalFee / 3                 // 0.1% - FAIR burned
+devFee = totalFee / 3                     // 0.1% - sent to deployer
+```
+
+### 11.6 State Variables
+
+```
+address public immutable FAIR_TOKEN;
+address public immutable AMM_ADDRESS;
+address public immutable DEPLOYER;
+address public immutable GOVERNANCE;
+
+bytes32 public immutable WHITELIST_ROOT;
+
+uint256 public totalClaims;
+uint256 public totalFeesToDev;
+uint256 public totalFairsBurned;
+uint256 public ammK;                       // X * Y constant
+
+mapping(address => bool) public hasClaimed;
+mapping(bytes32 => bool) public usedInvitePairs;
+```
+
+---
+
+## 12. References
+
+- **EIP-712**: Ethereum typed structured data hashing and signing
+- **EIP-2612**: Permit - gasless approvals via signatures
+- **Uniswap V2 Whitepaper**: Constant product AMM mechanics
+- **Compound Governance**: DAO governance patterns and timelocks
+- **Merkle Trees**: Efficient proof systems for large datasets
+
+---
+
+## 13. Changelog
+
+### Version 0.3 (November 22, 2025)
+- Initial concept draft
+- Complete specification of whitelist-native design
+- Detailed AMM and fee mechanics
+- Referral system with mutual signatures
+- Governance framework with hard invariants
+
+### Future Versions
+- Add detailed Solidity interface definitions
+- Include simulation results for invite forest growth
+- Add economic modeling and tokenomics analysis
+- Provide test suite specifications
+- Include audit reports and findings```
