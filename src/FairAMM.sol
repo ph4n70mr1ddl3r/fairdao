@@ -145,7 +145,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
     function addFairLiquidity(uint256 amount) external {
         if (msg.sender != claimContract && msg.sender != owner()) revert Unauthorized();
         fairBalance += amount;
-        assert(fairToken.balanceOf(address(this)) >= fairBalance);
+        require(fairToken.balanceOf(address(this)) >= fairBalance, "Insufficient token balance");
         emit LiquidityAdded(msg.sender, amount);
     }
     
