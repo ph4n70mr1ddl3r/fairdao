@@ -19,6 +19,8 @@ contract FairGovernor is
 {
     FAIR public immutable fairToken;
     
+    error ZeroAddress();
+    
     constructor(
         FAIR _token,
         TimelockController _timelock,
@@ -33,6 +35,7 @@ contract FairGovernor is
         GovernorVotesQuorumFraction(quorumNumerator)
         GovernorTimelockControl(_timelock)
     {
+        if (address(_token) == address(0) || address(_timelock) == address(0)) revert ZeroAddress();
         fairToken = _token;
     }
     

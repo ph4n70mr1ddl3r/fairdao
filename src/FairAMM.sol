@@ -36,7 +36,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
     error ZeroAddress();
     
     constructor(address _fairToken, address _deployer, address initialOwner) Ownable(initialOwner) {
-        if (_fairToken == address(0) || _deployer == address(0)) revert ZeroAddress();
+        if (_fairToken == address(0) || _deployer == address(0) || initialOwner == address(0)) revert ZeroAddress();
         fairToken = FAIR(_fairToken);
         deployer = _deployer;
     }
