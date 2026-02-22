@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
@@ -202,51 +203,33 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(account))));
         return MerkleProof.verify(proof, whitelistRoot, leaf);
     }
-    
+
     function isBootstrapPhase() external view returns (bool) {
         return totalClaims < BOOTSTRAP_COUNT;
     }
-    
+
     function remainingInviteSlots(address user) external view returns (uint256) {
         if (!hasClaimed[user]) return 0;
         return INVITE_SLOTS_PER_MEMBER - inviteSlotsUsed[user];
     }
-    
+
     function getReferralChain(address account) external view returns (address[] memory) {
         uint256 depth = 0;
         address current = inviterOf[account];
-        
+
         while (current != address(0) && depth < MAX_REFERRAL_LEVELS) {
             depth++;
             current = inviterOf[current];
         }
-        
+
         address[] memory chain = new address[](depth);
         current = inviterOf[account];
-        
+
         for (uint256 i = 0; i < depth; i++) {
             chain[i] = current;
             current = inviterOf[current];
         }
-        
-        return chain;
-    }
-}
 
-library MerkleProof {
-    function verify(bytes32[] calldata proof, bytes32 root, bytes32 leaf) internal pure returns (bool) {
-        bytes32 computedHash = leaf;
-        
-        for (uint256 i = 0; i < proof.length; i++) {
-            bytes32 proofElement = proof[i];
-            
-            if (computedHash <= proofElement) {
-                computedHash = keccak256(bytes.concat(computedHash, proofElement));
-            } else {
-                computedHash = keccak256(bytes.concat(proofElement, computedHash));
-            }
-        }
-        
-        return computedHash == root;
+        return chain;
     }
 }

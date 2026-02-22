@@ -26,6 +26,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
     event Donate(address indexed sender, uint256 ethAmount);
     event FeesCollected(uint256 devFee, uint256 burnAmount);
     event ClaimContractSet(address indexed claimContract);
+    event LiquidityAdded(address indexed sender, uint256 amount);
     
     error NoLiquidity();
     error InsufficientOutput();
@@ -123,6 +124,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
     function addFairLiquidity(uint256 amount) external {
         if (msg.sender != claimContract && msg.sender != owner()) revert Unauthorized();
         fairBalance += amount;
+        emit LiquidityAdded(msg.sender, amount);
     }
     
     function getAmountOut(bool ethIn, uint256 amountIn) external view returns (uint256) {

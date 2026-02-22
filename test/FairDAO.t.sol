@@ -6,7 +6,6 @@ import {FAIR} from "../src/FAIR.sol";
 import {FairAMM} from "../src/FairAMM.sol";
 import {FairClaim} from "../src/FairClaim.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 contract FairDAOTest is Test {
     using ECDSA for bytes32;
