@@ -111,7 +111,6 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
             emit BootstrapClaim(msg.sender, bootstrapClaimants.length - 1);
         }
         
-        uint256 referralUsed = 0;
         uint256 ammDonation = AMM_BASE_SHARE + REFERRAL_BUDGET;
         
         fairToken.mint(msg.sender, CLAIMANT_SHARE);

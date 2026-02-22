@@ -104,9 +104,9 @@ contract FairAMM is ReentrancyGuard, Ownable {
     }
     
     function _distributeFees(uint256 fee, bool isEthIn) internal {
-        uint256 poolFee = (fee * POOL_FEE_SHARE * 3) / SWAP_FEE_BASIS_POINTS;
-        uint256 devFee = isEthIn ? poolFee : 0;
-        uint256 burnAmount = isEthIn ? 0 : poolFee;
+        uint256 poolFee = (fee * POOL_FEE_SHARE) / 100;
+        uint256 devFee = isEthIn ? (fee * DEV_FEE_SHARE) / 100 : 0;
+        uint256 burnAmount = isEthIn ? 0 : (fee * BURN_FEE_SHARE) / 100;
         
         if (isEthIn) {
             ethBalance += poolFee;
