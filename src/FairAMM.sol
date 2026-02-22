@@ -68,12 +68,14 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (amountOut < amountOutMin) revert InsufficientOutput();
         if (amountOut > fairBalance) revert InsufficientOutput();
         
-        uint256 poolFee = _distributeFees(fee, true);
-        
-        require(fairToken.transfer(msg.sender, amountOut), "Transfer failed");
+        uint256 devFee = (fee * DEV_FEE_SHARE) / 100;
+        uint256 poolFee = fee - devFee;
         
         ethBalance = newEthBalance + poolFee;
         fairBalance = newFairBalance;
+        
+        _sendDevFee(devFee);
+        require(fairToken.transfer(msg.sender, amountOut), "Transfer failed");
         
         emit Swap(msg.sender, true, msg.value, amountOut, fee);
     }
@@ -91,15 +93,16 @@ contract FairAMM is ReentrancyGuard, Ownable {
         
         amountOut = ethBalance - newEthBalance;
         if (amountOut < amountOutMin) revert InsufficientOutput();
-        if (amountOut > ethBalance) revert InsufficientOutput();
         if (amountOut > address(this).balance) revert InsufficientOutput();
         
-        uint256 poolFee = _distributeFees(fee, false);
-        
-        require(fairToken.transferFrom(msg.sender, address(this), amountIn), "TransferFrom failed");
+        uint256 burnAmount = (fee * BURN_FEE_SHARE) / 100;
+        uint256 poolFee = fee - burnAmount;
         
         fairBalance = newFairBalance + poolFee;
         ethBalance = newEthBalance;
+        
+        require(fairToken.transferFrom(msg.sender, address(this), amountIn), "TransferFrom failed");
+        _burnFees(burnAmount);
         
         (bool success, ) = payable(msg.sender).call{value: amountOut}("");
         require(success, "ETH transfer failed");
@@ -107,21 +110,21 @@ contract FairAMM is ReentrancyGuard, Ownable {
         emit Swap(msg.sender, false, amountIn, amountOut, fee);
     }
     
-    function _distributeFees(uint256 fee, bool isEthIn) internal returns (uint256 poolFee) {
-        uint256 devFee = isEthIn ? (fee * DEV_FEE_SHARE) / 100 : 0;
-        uint256 burnAmount = isEthIn ? 0 : (fee * BURN_FEE_SHARE) / 100;
-        poolFee = fee - devFee - burnAmount;
-        
-        if (isEthIn) {
+    function _sendDevFee(uint256 devFee) internal {
+        if (devFee > 0) {
             (bool success, ) = payable(deployer).call{value: devFee}("");
             require(success, "Dev fee transfer failed");
             totalFeesToDev += devFee;
-        } else {
+            emit FeesCollected(devFee, 0);
+        }
+    }
+    
+    function _burnFees(uint256 burnAmount) internal {
+        if (burnAmount > 0) {
             fairToken.burnFrom(address(this), burnAmount);
             totalFairsBurned += burnAmount;
+            emit FeesCollected(0, burnAmount);
         }
-        
-        emit FeesCollected(devFee, burnAmount);
     }
     
     function addFairLiquidity(uint256 amount) external {
