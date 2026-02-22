@@ -65,6 +65,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     error ClaimWindowNotOpen();
     error ClaimWindowClosed();
     error InvalidInviter();
+    error ZeroAddress();
     
     constructor(
         address _fairToken,
@@ -74,6 +75,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         uint256 _claimWindowEnd,
         address initialOwner
     ) EIP712("FairDAO Claim", "1") Ownable(initialOwner) {
+        if (_fairToken == address(0) || _amm == address(0)) revert ZeroAddress();
         fairToken = FAIR(_fairToken);
         amm = FairAMM(_amm);
         whitelistRoot = _whitelistRoot;

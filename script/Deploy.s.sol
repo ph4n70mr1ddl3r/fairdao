@@ -67,6 +67,7 @@ contract DeployFairDAO is Script {
         timelock.grantRole(executorRole, address(governor));
         
         timelock.revokeRole(proposerRole, deployer);
+        timelock.revokeRole(timelock.DEFAULT_ADMIN_ROLE(), deployer);
         
         fair.setAMM(address(amm));
         fair.setClaimContract(address(claim));

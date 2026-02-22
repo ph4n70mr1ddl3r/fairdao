@@ -15,12 +15,15 @@ contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
     
     error AlreadySet();
     error Unauthorized();
+    error ZeroAddress();
     
     constructor(address initialOwner) 
         ERC20("FAIR Governance Token", "FAIR") 
         ERC20Permit("FAIR Governance Token")
         Ownable(initialOwner) 
-    {}
+    {
+        if (initialOwner == address(0)) revert ZeroAddress();
+    }
     
     function setAMM(address _amm) external onlyOwner {
         if (amm != address(0)) revert AlreadySet();
