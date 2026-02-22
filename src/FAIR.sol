@@ -12,6 +12,7 @@ contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
     
     event AMMSet(address indexed amm);
     event ClaimContractSet(address indexed claimContract);
+    event Burn(address indexed account, uint256 amount);
     
     error AlreadySet();
     error Unauthorized();
@@ -27,12 +28,14 @@ contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
     
     function setAMM(address _amm) external onlyOwner {
         if (amm != address(0)) revert AlreadySet();
+        if (_amm == address(0)) revert ZeroAddress();
         amm = _amm;
         emit AMMSet(_amm);
     }
     
     function setClaimContract(address _claimContract) external onlyOwner {
         if (claimContract != address(0)) revert AlreadySet();
+        if (_claimContract == address(0)) revert ZeroAddress();
         claimContract = _claimContract;
         emit ClaimContractSet(_claimContract);
     }
@@ -44,6 +47,7 @@ contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
     
     function burn(uint256 amount) external {
         _burn(msg.sender, amount);
+        emit Burn(msg.sender, amount);
     }
     
     function burnFrom(address from, uint256 amount) external {
@@ -52,6 +56,7 @@ contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
             _spendAllowance(from, msg.sender, amount);
         }
         _burn(from, amount);
+        emit Burn(from, amount);
     }
     
     function _update(address from, address to, uint256 value) internal override(ERC20, ERC20Votes) {

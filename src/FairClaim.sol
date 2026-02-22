@@ -25,6 +25,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     uint256 public constant INVITE_SLOTS_PER_MEMBER = 4;
     uint256 public constant MAX_REFERRAL_LEVELS = 4;
     uint256 public constant REFERRAL_REWARD_PER_LEVEL = 1 * 1e18;
+    uint256 public constant MAX_PROOF_LENGTH = 32;
     
     uint256 public totalClaims;
     uint256 public claimWindowStart;
@@ -35,7 +36,10 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     mapping(address => uint256) public inviteSlotsUsed;
     mapping(bytes32 => bool) public usedInvitePairs;
     
-    address[] public bootstrapClaimants;
+    event Claimed(address indexed claimant, address indexed inviter, uint256 claimantAmount, uint256 ammAmount);
+    event ReferralReward(address indexed recipient, address indexed claimant, uint256 amount, uint8 level);
+    event BootstrapClaim(address indexed claimant);
+    event ClaimWindowSet(uint256 start, uint256 end);
     
     bytes32 public constant INVITE_MESSAGE_TYPEHASH = keccak256(
         "InviteMessage(address inviter,address invitee,address claimContract,uint256 chainId,uint256 slotIndex,uint256 deadline)"
@@ -50,11 +54,6 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         uint256 deadline;
     }
     
-    event Claimed(address indexed claimant, address indexed inviter, uint256 claimantAmount, uint256 ammAmount);
-    event ReferralReward(address indexed recipient, address indexed claimant, uint256 amount, uint8 level);
-    event BootstrapClaim(address indexed claimant, uint256 index);
-    event ClaimWindowSet(uint256 start, uint256 end);
-    
     error AlreadyClaimed();
     error InvalidProof();
     error NoLiquidity();
@@ -62,6 +61,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     error InviteAlreadyUsed();
     error NoInviteSlots();
     error InvalidSignature();
+    error InvalidSignatureLength();
     error ClaimWindowNotOpen();
     error ClaimWindowClosed();
     error InvalidInviter();
@@ -100,6 +100,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     function claim(bytes32[] calldata merkleProof) external nonReentrant whenNotPaused {
         _validateClaimWindow();
         if (hasClaimed[msg.sender]) revert AlreadyClaimed();
+        if (merkleProof.length > MAX_PROOF_LENGTH) revert InvalidProof();
         if (!_verifyMerkleProof(merkleProof, msg.sender)) revert InvalidProof();
         if (!amm.hasLiquidity()) revert NoLiquidity();
         
@@ -109,9 +110,8 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         totalClaims++;
         
         if (isBootstrap) {
-            bootstrapClaimants.push(msg.sender);
             inviterOf[msg.sender] = address(0);
-            emit BootstrapClaim(msg.sender, bootstrapClaimants.length - 1);
+            emit BootstrapClaim(msg.sender);
         }
         
         uint256 ammDonation = AMM_BASE_SHARE + REFERRAL_BUDGET;
@@ -133,11 +133,14 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     ) external nonReentrant whenNotPaused {
         _validateClaimWindow();
         if (hasClaimed[msg.sender]) revert AlreadyClaimed();
+        if (merkleProof.length > MAX_PROOF_LENGTH) revert InvalidProof();
         if (!_verifyMerkleProof(merkleProof, msg.sender)) revert InvalidProof();
         if (!amm.hasLiquidity()) revert NoLiquidity();
         if (deadline < block.timestamp) revert InviteExpired();
         if (inviter == address(0)) revert InvalidInviter();
         if (!hasClaimed[inviter]) revert InvalidInviter();
+        if (inviteSlotsUsed[inviter] >= INVITE_SLOTS_PER_MEMBER) revert NoInviteSlots();
+        if (sigInviter.length != 65 || sigInvitee.length != 65) revert InvalidSignatureLength();
         
         bytes32 invitePairHash = keccak256(abi.encodePacked(inviter, msg.sender, slotIndex));
         if (usedInvitePairs[invitePairHash]) revert InviteAlreadyUsed();
@@ -166,8 +169,6 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         
         if (signerInviter != inviter) revert InvalidSignature();
         if (signerInvitee != msg.sender) revert InvalidSignature();
-        
-        if (inviteSlotsUsed[inviter] >= INVITE_SLOTS_PER_MEMBER) revert NoInviteSlots();
         
         usedInvitePairs[invitePairHash] = true;
         inviteSlotsUsed[inviter]++;

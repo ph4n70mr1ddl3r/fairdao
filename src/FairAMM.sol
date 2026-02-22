@@ -70,10 +70,10 @@ contract FairAMM is ReentrancyGuard, Ownable {
         
         uint256 poolFee = _distributeFees(fee, true);
         
+        require(fairToken.transfer(msg.sender, amountOut), "Transfer failed");
+        
         ethBalance = newEthBalance + poolFee;
         fairBalance = newFairBalance;
-        
-        require(fairToken.transfer(msg.sender, amountOut), "Transfer failed");
         
         emit Swap(msg.sender, true, msg.value, amountOut, fee);
     }
@@ -96,10 +96,11 @@ contract FairAMM is ReentrancyGuard, Ownable {
         
         uint256 poolFee = _distributeFees(fee, false);
         
+        require(fairToken.transferFrom(msg.sender, address(this), amountIn), "TransferFrom failed");
+        
         fairBalance = newFairBalance + poolFee;
         ethBalance = newEthBalance;
         
-        require(fairToken.transferFrom(msg.sender, address(this), amountIn), "TransferFrom failed");
         (bool success, ) = payable(msg.sender).call{value: amountOut}("");
         require(success, "ETH transfer failed");
         
@@ -170,9 +171,8 @@ contract FairAMM is ReentrancyGuard, Ownable {
     }
 
     receive() external payable nonReentrant {
-        if (msg.value > 0) {
-            ethBalance += msg.value;
-            emit Donate(msg.sender, msg.value);
-        }
+        if (msg.value == 0) revert InvalidAmount();
+        ethBalance += msg.value;
+        emit Donate(msg.sender, msg.value);
     }
 }
