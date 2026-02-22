@@ -183,4 +183,107 @@ contract FairDAOTest is Test {
         
         assertEq(amm.ethBalance(), 1 ether);
     }
+    
+    function test_AMM_SwapEthForFair() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+        
+        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+        
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+        
+        vm.prank(user1);
+        claim.claim(proof);
+        
+        uint256 fairBalanceBefore = fair.balanceOf(user1);
+        assertTrue(fairBalanceBefore > 0);
+        
+        vm.deal(user2, 10 ether);
+        vm.startPrank(user2);
+        
+        uint256 amountOut = amm.getAmountOut(true, 0.1 ether);
+        assertTrue(amountOut > 0);
+        
+        uint256 actualOut = amm.swapEthForFair{value: 0.1 ether}(amountOut);
+        assertEq(actualOut, amountOut);
+        assertEq(fair.balanceOf(user2), amountOut);
+        vm.stopPrank();
+    }
+    
+    function test_AMM_SwapFairForEth() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+        
+        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+        
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+        
+        vm.prank(user1);
+        claim.claim(proof);
+        
+        uint256 fairBalanceUser1 = fair.balanceOf(user1);
+        assertTrue(fairBalanceUser1 > 0);
+        
+        vm.deal(user2, 10 ether);
+        vm.startPrank(user2);
+        uint256 fairAmount = amm.getAmountOut(true, 0.1 ether);
+        amm.swapEthForFair{value: 0.1 ether}(fairAmount);
+        vm.stopPrank();
+        
+        uint256 ethBalanceBefore = user2.balance;
+        
+        vm.startPrank(user2);
+        fair.approve(address(amm), fairAmount);
+        
+        uint256 ethOut = amm.getAmountOut(false, fairAmount);
+        assertTrue(ethOut > 0);
+        
+        uint256 actualOut = amm.swapFairForEth(fairAmount, ethOut);
+        assertEq(actualOut, ethOut);
+        assertEq(user2.balance, ethBalanceBefore + ethOut);
+        vm.stopPrank();
+    }
+    
+    function test_AMM_FeeDistributionCorrect() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+        
+        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+        
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+        
+        vm.prank(user1);
+        claim.claim(proof);
+        
+        vm.deal(user2, 10 ether);
+        vm.prank(user2);
+        amm.swapEthForFair{value: 0.1 ether}(0);
+        
+        uint256 trackedEth = amm.ethBalance();
+        uint256 actualEth = address(amm).balance;
+        
+        assertEq(trackedEth, actualEth, "ETH balance mismatch - fee not properly distributed");
+    }
+    
+    function test_AMM_RescueETH_RevertsWhenExceedsExcess() public {
+        vm.deal(user1, 10 ether);
+        vm.prank(user1);
+        amm.donate{value: 1 ether}();
+        
+        vm.prank(owner);
+        vm.expectRevert("Cannot rescue tracked ETH");
+        amm.rescueETH(0.1 ether);
+    }
 }

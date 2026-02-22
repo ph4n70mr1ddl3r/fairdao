@@ -45,7 +45,9 @@ contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
     
     function burnFrom(address from, uint256 amount) external {
         if (msg.sender != amm) revert Unauthorized();
-        _spendAllowance(from, msg.sender, amount);
+        if (from != msg.sender) {
+            _spendAllowance(from, msg.sender, amount);
+        }
         _burn(from, amount);
     }
     

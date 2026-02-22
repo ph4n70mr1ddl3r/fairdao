@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./FAIR.sol";
 
 contract FairAMM is ReentrancyGuard, Ownable {
@@ -14,9 +15,8 @@ contract FairAMM is ReentrancyGuard, Ownable {
     uint256 public fairBalance;
     
     uint256 public constant SWAP_FEE_BASIS_POINTS = 30;
-    uint256 public constant POOL_FEE_SHARE = 10;
-    uint256 public constant BURN_FEE_SHARE = 10;
     uint256 public constant DEV_FEE_SHARE = 10;
+    uint256 public constant BURN_FEE_SHARE = 10;
     uint256 public constant BASIS_POINTS = 10000;
     
     uint256 public totalFeesToDev;
@@ -105,9 +105,9 @@ contract FairAMM is ReentrancyGuard, Ownable {
     }
     
     function _distributeFees(uint256 fee, bool isEthIn) internal returns (uint256 poolFee) {
-        poolFee = (fee * POOL_FEE_SHARE) / 100;
         uint256 devFee = isEthIn ? (fee * DEV_FEE_SHARE) / 100 : 0;
         uint256 burnAmount = isEthIn ? 0 : (fee * BURN_FEE_SHARE) / 100;
+        poolFee = fee - devFee - burnAmount;
         
         if (isEthIn) {
             (bool success, ) = payable(deployer).call{value: devFee}("");
@@ -152,6 +152,21 @@ contract FairAMM is ReentrancyGuard, Ownable {
         return ethBalance > 0;
     }
     
+    function rescueETH(uint256 amount) external onlyOwner {
+        uint256 excess = address(this).balance - ethBalance;
+        require(amount <= excess, "Cannot rescue tracked ETH");
+        (bool success, ) = payable(owner()).call{value: amount}("");
+        require(success, "Rescue failed");
+    }
+    
+    function rescueTokens(address token, uint256 amount) external onlyOwner {
+        if (token == address(fairToken)) {
+            uint256 excess = fairToken.balanceOf(address(this)) - fairBalance;
+            require(amount <= excess, "Cannot rescue tracked FAIR");
+        }
+        require(IERC20(token).transfer(owner(), amount), "Transfer failed");
+    }
+
     receive() external payable nonReentrant {
         if (msg.value > 0) {
             ethBalance += msg.value;

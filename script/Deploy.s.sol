@@ -39,10 +39,10 @@ contract DeployFairDAO is Script {
         );
         
         address[] memory proposers = new address[](1);
-        proposers[0] = deployer;
+        proposers[0] = address(0);
         
         address[] memory executors = new address[](1);
-        executors[0] = deployer;
+        executors[0] = address(0);
         
         TimelockController timelock = new TimelockController(
             TIMELOCK_DELAY,
@@ -59,6 +59,14 @@ contract DeployFairDAO is Script {
             PROPOSAL_THRESHOLD,
             QUORUM_NUMERATOR
         );
+        
+        bytes32 proposerRole = timelock.PROPOSER_ROLE();
+        bytes32 executorRole = timelock.EXECUTOR_ROLE();
+        
+        timelock.grantRole(proposerRole, address(governor));
+        timelock.grantRole(executorRole, address(governor));
+        
+        timelock.revokeRole(proposerRole, deployer);
         
         fair.setAMM(address(amm));
         fair.setClaimContract(address(claim));
