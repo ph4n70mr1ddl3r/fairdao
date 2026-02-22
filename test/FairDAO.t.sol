@@ -286,4 +286,28 @@ contract FairDAOTest is Test {
         vm.expectRevert("Cannot rescue tracked ETH");
         amm.rescueETH(0.1 ether);
     }
+    
+    function test_Claim_RevertsWithInvalidSlotIndex() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+        
+        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+        
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+        
+        vm.prank(user1);
+        claim.claim(proof);
+        
+        bytes32[] memory proof2 = new bytes32[](2);
+        proof2[0] = leaf1;
+        proof2[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+        
+        vm.prank(user2);
+        vm.expectRevert(FairClaim.InvalidSlotIndex.selector);
+        claim.claimWithInvite(proof2, user1, 100, "", "", block.timestamp + 1 hours);
+    }
 }

@@ -67,6 +67,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     error ClaimWindowNotOpen();
     error ClaimWindowClosed();
     error InvalidInviter();
+    error InvalidSlotIndex();
     error ZeroAddress();
     
     constructor(
@@ -141,6 +142,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         if (deadline < block.timestamp) revert InviteExpired();
         if (inviter == address(0)) revert InvalidInviter();
         if (!hasClaimed[inviter]) revert InvalidInviter();
+        if (slotIndex >= INVITE_SLOTS_PER_MEMBER) revert InvalidSlotIndex();
         if (inviteSlotsUsed[inviter] >= INVITE_SLOTS_PER_MEMBER) revert NoInviteSlots();
         if (sigInviter.length != 65 || sigInvitee.length != 65) revert InvalidSignatureLength();
         

@@ -15,10 +15,8 @@ contract FairAMM is ReentrancyGuard, Ownable {
     uint256 public fairBalance;
     
     uint256 public constant SWAP_FEE_BASIS_POINTS = 30;
-    uint256 public constant DEV_FEE_SHARE = 10;
-    uint256 public constant BURN_FEE_SHARE = 10;
+    uint256 public constant FEE_SHARE = 33;
     uint256 public constant BASIS_POINTS = 10000;
-    uint256 public constant FEE_DENOMINATOR = 100;
     uint256 public constant MINIMUM_LIQUIDITY = 1000;
     
     uint256 public totalFeesToDev;
@@ -78,7 +76,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (amountOut < amountOutMin) revert InsufficientOutput();
         if (amountOut > _fairBalance) revert InsufficientOutput();
         
-        uint256 devFee = (fee * DEV_FEE_SHARE) / FEE_DENOMINATOR;
+        uint256 devFee = (fee * FEE_SHARE) / 100;
         uint256 poolFee = fee - devFee;
         
         ethBalance = newEthBalance + poolFee;
@@ -112,7 +110,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (amountOut < amountOutMin) revert InsufficientOutput();
         if (amountOut > address(this).balance) revert InsufficientOutput();
         
-        uint256 burnAmount = (fee * BURN_FEE_SHARE) / FEE_DENOMINATOR;
+        uint256 burnAmount = (fee * FEE_SHARE) / 100;
         uint256 poolFee = fee - burnAmount;
         
         fairBalance = newFairBalance + poolFee;
