@@ -65,9 +65,9 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (amountOut < amountOutMin) revert InsufficientOutput();
         if (amountOut > fairBalance) revert InsufficientOutput();
         
-        _distributeFees(fee, true);
+        uint256 poolFee = _distributeFees(fee, true);
         
-        ethBalance = newEthBalance;
+        ethBalance = newEthBalance + poolFee;
         fairBalance = newFairBalance;
         
         require(fairToken.transfer(msg.sender, amountOut), "Transfer failed");
@@ -91,9 +91,9 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (amountOut > ethBalance) revert InsufficientOutput();
         if (amountOut > address(this).balance) revert InsufficientOutput();
         
-        _distributeFees(fee, false);
+        uint256 poolFee = _distributeFees(fee, false);
         
-        fairBalance = newFairBalance;
+        fairBalance = newFairBalance + poolFee;
         ethBalance = newEthBalance;
         
         require(fairToken.transferFrom(msg.sender, address(this), amountIn), "TransferFrom failed");
@@ -103,20 +103,16 @@ contract FairAMM is ReentrancyGuard, Ownable {
         emit Swap(msg.sender, false, amountIn, amountOut, fee);
     }
     
-    function _distributeFees(uint256 fee, bool isEthIn) internal {
-        uint256 poolFee = (fee * POOL_FEE_SHARE) / 100;
+    function _distributeFees(uint256 fee, bool isEthIn) internal returns (uint256 poolFee) {
+        poolFee = (fee * POOL_FEE_SHARE) / 100;
         uint256 devFee = isEthIn ? (fee * DEV_FEE_SHARE) / 100 : 0;
         uint256 burnAmount = isEthIn ? 0 : (fee * BURN_FEE_SHARE) / 100;
         
         if (isEthIn) {
-            ethBalance += poolFee;
-            
             (bool success, ) = payable(deployer).call{value: devFee}("");
             require(success, "Dev fee transfer failed");
             totalFeesToDev += devFee;
         } else {
-            fairBalance += poolFee;
-            
             fairToken.burnFrom(address(this), burnAmount);
             totalFairsBurned += burnAmount;
         }
@@ -154,7 +150,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         return ethBalance > 0;
     }
     
-    receive() external payable {
+    receive() external payable nonReentrant {
         if (msg.value > 0) {
             ethBalance += msg.value;
             emit Donate(msg.sender, msg.value);
