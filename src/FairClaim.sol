@@ -35,6 +35,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     mapping(address => address) public inviterOf;
     mapping(address => uint256) public inviteSlotsUsed;
     mapping(bytes32 => bool) public usedInvitePairs;
+    mapping(address => mapping(uint256 => bool)) public usedSlotIndex;
     
     event Claimed(address indexed claimant, address indexed inviter, uint256 claimantAmount, uint256 ammAmount);
     event ReferralReward(address indexed recipient, address indexed claimant, uint256 amount, uint8 level);
@@ -59,6 +60,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     error NoLiquidity();
     error InviteExpired();
     error InviteAlreadyUsed();
+    error SlotAlreadyUsed();
     error NoInviteSlots();
     error InvalidSignature();
     error InvalidSignatureLength();
@@ -144,6 +146,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         
         bytes32 invitePairHash = keccak256(abi.encodePacked(inviter, msg.sender, slotIndex));
         if (usedInvitePairs[invitePairHash]) revert InviteAlreadyUsed();
+        if (usedSlotIndex[inviter][slotIndex]) revert SlotAlreadyUsed();
         
         InviteMessage memory message = InviteMessage({
             inviter: inviter,
@@ -171,6 +174,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         if (signerInvitee != msg.sender) revert InvalidSignature();
         
         usedInvitePairs[invitePairHash] = true;
+        usedSlotIndex[inviter][slotIndex] = true;
         inviteSlotsUsed[inviter]++;
         hasClaimed[msg.sender] = true;
         inviterOf[msg.sender] = inviter;

@@ -10,6 +10,8 @@ contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
     address public amm;
     address public claimContract;
     
+    uint256 public constant MAX_SUPPLY = 1_000_000 * 1e18;
+    
     event AMMSet(address indexed amm);
     event ClaimContractSet(address indexed claimContract);
     event Burn(address indexed account, uint256 amount);
@@ -17,6 +19,7 @@ contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
     error AlreadySet();
     error Unauthorized();
     error ZeroAddress();
+    error SupplyExceeded();
     
     constructor(address initialOwner) 
         ERC20("FAIR Governance Token", "FAIR") 
@@ -40,8 +43,12 @@ contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
         emit ClaimContractSet(_claimContract);
     }
     
+    /// @notice Mint new FAIR tokens (restricted to AMM and Claim contracts)
+    /// @param to Recipient address
+    /// @param amount Amount to mint
     function mint(address to, uint256 amount) external {
         if (msg.sender != claimContract && msg.sender != amm) revert Unauthorized();
+        if (totalSupply() + amount > MAX_SUPPLY) revert SupplyExceeded();
         _mint(to, amount);
     }
     
