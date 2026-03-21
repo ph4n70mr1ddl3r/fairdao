@@ -411,6 +411,265 @@ contract FairDAOTest is Test {
         emptyClaim.claim(proof);
     }
 
+    function test_Claim_MultiLevelReferralRewards() public {
+        uint256 key0 = 0xabc123;
+        uint256 key1 = 0xabc124;
+        uint256 key2 = 0xabc125;
+        address user0 = vm.addr(key0);
+        address user1 = vm.addr(key1);
+        address user2 = vm.addr(key2);
+
+        vm.startPrank(owner);
+        FAIR testFair = new FAIR(owner);
+        FairAMM testAmm = new FairAMM(address(testFair), owner, owner);
+
+        bytes32 leaf0 = keccak256(bytes.concat(keccak256(abi.encode(user0))));
+        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+
+        bytes32 testRoot = _hashPair(_hashPair(leaf0, leaf1), leaf2);
+
+        FairClaim testClaim = new FairClaim(
+            address(testFair),
+            payable(address(testAmm)),
+            testRoot,
+            0,
+            0,
+            owner
+        );
+
+        testFair.setAMM(address(testAmm));
+        testFair.setClaimContract(address(testClaim));
+        testAmm.setClaimContract(address(testClaim));
+        vm.stopPrank();
+
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        testAmm.donate{value: 1 ether}();
+
+        bytes32[] memory proof0 = new bytes32[](2);
+        proof0[0] = leaf1;
+        proof0[1] = leaf2;
+        vm.prank(user0);
+        testClaim.claim(proof0);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 slotIndex0 = 0;
+
+        bytes32 digest0 = _hashTypedDataV4(
+            address(testClaim),
+            keccak256(abi.encode(
+                testClaim.INVITE_MESSAGE_TYPEHASH(),
+                user0,
+                user1,
+                address(testClaim),
+                block.chainid,
+                slotIndex0,
+                deadline
+            ))
+        );
+
+        bytes memory sigInviter0 = _sign(digest0, key0);
+        bytes memory sigInvitee0 = _sign(digest0, key1);
+
+        bytes32[] memory proof1 = new bytes32[](2);
+        proof1[0] = leaf0;
+        proof1[1] = leaf2;
+
+        vm.prank(user1);
+        testClaim.claimWithInvite(proof1, user0, slotIndex0, sigInviter0, sigInvitee0, deadline);
+
+        uint256 slotIndex1 = 0;
+
+        bytes32 digest1 = _hashTypedDataV4(
+            address(testClaim),
+            keccak256(abi.encode(
+                testClaim.INVITE_MESSAGE_TYPEHASH(),
+                user1,
+                user2,
+                address(testClaim),
+                block.chainid,
+                slotIndex1,
+                deadline
+            ))
+        );
+
+        bytes memory sigInviter1 = _sign(digest1, key1);
+        bytes memory sigInvitee1 = _sign(digest1, key2);
+
+        bytes32[] memory proof2 = new bytes32[](1);
+        proof2[0] = _hashPair(leaf0, leaf1);
+
+        vm.prank(user2);
+        testClaim.claimWithInvite(proof2, user1, slotIndex1, sigInviter1, sigInvitee1, deadline);
+
+        assertEq(testFair.balanceOf(user2), testClaim.CLAIMANT_SHARE());
+        assertEq(testFair.balanceOf(user1), testClaim.CLAIMANT_SHARE() + 1 * 1e18);
+        assertEq(testFair.balanceOf(user0), testClaim.CLAIMANT_SHARE() + 2 * 1e18);
+    }
+
+    function test_Claim_ClaimWindowValidation() public {
+        vm.startPrank(owner);
+        FAIR windowFair = new FAIR(owner);
+        FairAMM windowAmm = new FairAMM(address(windowFair), owner, owner);
+        
+        bytes32 wLeaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
+        bytes32 wLeaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+        bytes32 wLeaf3 = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+        
+        bytes32 windowRoot = _hashPair(_hashPair(wLeaf1, wLeaf2), wLeaf3);
+        
+        FairClaim windowClaim = new FairClaim(
+            address(windowFair),
+            payable(address(windowAmm)),
+            windowRoot,
+            block.timestamp + 100,
+            block.timestamp + 1000,
+            owner
+        );
+        
+        windowFair.setAMM(address(windowAmm));
+        windowFair.setClaimContract(address(windowClaim));
+        windowAmm.setClaimContract(address(windowClaim));
+        vm.stopPrank();
+
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        windowAmm.donate{value: 1 ether}();
+
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = wLeaf2;
+        proof[1] = wLeaf3;
+
+        vm.prank(user1);
+        vm.expectRevert(FairClaim.ClaimWindowNotOpen.selector);
+        windowClaim.claim(proof);
+
+        vm.warp(block.timestamp + 100);
+
+        vm.prank(user1);
+        windowClaim.claim(proof);
+        assertTrue(windowClaim.hasClaimed(user1));
+
+        vm.warp(block.timestamp + 901);
+
+        vm.prank(user2);
+        vm.expectRevert(FairClaim.ClaimWindowClosed.selector);
+        bytes32[] memory proof2 = new bytes32[](2);
+        proof2[0] = wLeaf1;
+        proof2[1] = wLeaf3;
+        windowClaim.claim(proof2);
+    }
+
+    function test_Claim_SetClaimWindowValidation() public {
+        vm.prank(owner);
+        vm.expectRevert(FairClaim.InvalidClaimWindow.selector);
+        claim.setClaimWindow(block.timestamp + 1000, block.timestamp + 100);
+
+        vm.prank(owner);
+        claim.setClaimWindow(block.timestamp + 100, block.timestamp + 1000);
+        assertEq(claim.claimWindowStart(), block.timestamp + 100);
+        assertEq(claim.claimWindowEnd(), block.timestamp + 1000);
+    }
+
+    function test_Claim_GetReferralChain_Full() public {
+        uint256 key0 = 0xdef123;
+        uint256 key1 = 0xdef124;
+        uint256 key2 = 0xdef125;
+        address user0 = vm.addr(key0);
+        address localUser1 = vm.addr(key1);
+        address localUser2 = vm.addr(key2);
+
+        vm.startPrank(owner);
+        FAIR testFair = new FAIR(owner);
+        FairAMM testAmm = new FairAMM(address(testFair), owner, owner);
+
+        bytes32 leaf0 = keccak256(bytes.concat(keccak256(abi.encode(user0))));
+        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(localUser1))));
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(localUser2))));
+
+        bytes32 testRoot = _hashPair(_hashPair(leaf0, leaf1), leaf2);
+
+        FairClaim testClaim = new FairClaim(
+            address(testFair),
+            payable(address(testAmm)),
+            testRoot,
+            0,
+            0,
+            owner
+        );
+
+        testFair.setAMM(address(testAmm));
+        testFair.setClaimContract(address(testClaim));
+        testAmm.setClaimContract(address(testClaim));
+        vm.stopPrank();
+
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        testAmm.donate{value: 1 ether}();
+
+        bytes32[] memory proof0 = new bytes32[](2);
+        proof0[0] = leaf1;
+        proof0[1] = leaf2;
+        vm.prank(user0);
+        testClaim.claim(proof0);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 slotIndex0 = 0;
+
+        bytes32 digest0 = _hashTypedDataV4(
+            address(testClaim),
+            keccak256(abi.encode(
+                testClaim.INVITE_MESSAGE_TYPEHASH(),
+                user0,
+                localUser1,
+                address(testClaim),
+                block.chainid,
+                slotIndex0,
+                deadline
+            ))
+        );
+
+        bytes memory sigInviter0 = _sign(digest0, key0);
+        bytes memory sigInvitee0 = _sign(digest0, key1);
+
+        bytes32[] memory proof1 = new bytes32[](2);
+        proof1[0] = leaf0;
+        proof1[1] = leaf2;
+
+        vm.prank(localUser1);
+        testClaim.claimWithInvite(proof1, user0, slotIndex0, sigInviter0, sigInvitee0, deadline);
+
+        uint256 slotIndex1 = 0;
+
+        bytes32 digest1 = _hashTypedDataV4(
+            address(testClaim),
+            keccak256(abi.encode(
+                testClaim.INVITE_MESSAGE_TYPEHASH(),
+                localUser1,
+                localUser2,
+                address(testClaim),
+                block.chainid,
+                slotIndex1,
+                deadline
+            ))
+        );
+
+        bytes memory sigInviter1 = _sign(digest1, key1);
+        bytes memory sigInvitee1 = _sign(digest1, key2);
+
+        bytes32[] memory proof2 = new bytes32[](1);
+        proof2[0] = _hashPair(leaf0, leaf1);
+
+        vm.prank(localUser2);
+        testClaim.claimWithInvite(proof2, localUser1, slotIndex1, sigInviter1, sigInvitee1, deadline);
+
+        address[] memory chain = testClaim.getReferralChain(localUser2);
+        assertEq(chain.length, 2);
+        assertEq(chain[0], localUser1);
+        assertEq(chain[1], user0);
+    }
+
     function _hashTypedDataV4(address claimingContract, bytes32 structHash) internal view returns (bytes32) {
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparatorV4(claimingContract), structHash));
     }

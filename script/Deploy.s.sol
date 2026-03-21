@@ -73,6 +73,10 @@ contract DeployFairDAO is Script {
         fair.setClaimContract(address(claim));
         amm.setClaimContract(address(claim));
         
+        fair.transferOwnership(address(timelock));
+        amm.transferOwnership(address(timelock));
+        claim.transferOwnership(address(timelock));
+        
         vm.stopBroadcast();
         
         return (fair, amm, claim, governor, timelock);

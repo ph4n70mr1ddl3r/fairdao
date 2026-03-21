@@ -77,6 +77,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     error InvalidSlotIndex();
     error ZeroAddress();
     error SelfInvite();
+    error InvalidClaimWindow();
     
     constructor(
         address _fairToken,
@@ -95,6 +96,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     }
     
     function setClaimWindow(uint256 _start, uint256 _end) external onlyOwner {
+        if (_start != 0 && _end != 0 && _start >= _end) revert InvalidClaimWindow();
         claimWindowStart = _start;
         claimWindowEnd = _end;
         emit ClaimWindowSet(_start, _end);

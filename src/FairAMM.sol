@@ -51,6 +51,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
     
     function setClaimContract(address _claimContract) external onlyOwner {
         if (claimContract != address(0)) revert AlreadySet();
+        if (_claimContract == address(0)) revert ZeroAddress();
         claimContract = _claimContract;
         emit ClaimContractSet(_claimContract);
     }
@@ -72,7 +73,10 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (_fairBalance < MINIMUM_LIQUIDITY) revert NoLiquidity();
         
         uint256 fee = (msg.value * SWAP_FEE_BASIS_POINTS) / BASIS_POINTS;
-        uint256 amountInAfterFee = msg.value - fee;
+        uint256 amountInAfterFee;
+        unchecked {
+            amountInAfterFee = msg.value - fee;
+        }
         
         uint256 k = _ethBalance * _fairBalance;
         uint256 newEthBalance = _ethBalance + amountInAfterFee;
@@ -84,7 +88,10 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (amountOut > fairToken.balanceOf(address(this))) revert InsufficientOutput();
         
         uint256 devFee = (fee * FEE_SHARE) / 100;
-        uint256 poolFee = fee - devFee;
+        uint256 poolFee;
+        unchecked {
+            poolFee = fee - devFee;
+        }
         
         ethBalance = newEthBalance + poolFee;
         fairBalance = newFairBalance;
@@ -107,7 +114,10 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (_ethBalance < MINIMUM_LIQUIDITY) revert NoLiquidity();
         
         uint256 fee = (amountIn * SWAP_FEE_BASIS_POINTS) / BASIS_POINTS;
-        uint256 amountInAfterFee = amountIn - fee;
+        uint256 amountInAfterFee;
+        unchecked {
+            amountInAfterFee = amountIn - fee;
+        }
         
         uint256 k = _ethBalance * _fairBalance;
         uint256 newFairBalance = _fairBalance + amountInAfterFee;
@@ -118,7 +128,10 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (amountOut > address(this).balance) revert InsufficientOutput();
         
         uint256 burnAmount = (fee * FEE_SHARE) / 100;
-        uint256 poolFee = fee - burnAmount;
+        uint256 poolFee;
+        unchecked {
+            poolFee = fee - burnAmount;
+        }
         
         fairBalance = newFairBalance + poolFee;
         ethBalance = newEthBalance;
