@@ -11,38 +11,71 @@ import "./FAIR.sol";
  * @notice Automated Market Maker for FAIR/ETH trading pair
  * @dev Uses constant product formula (x*y=k) with 0.3% swap fee.
  *      33% of fees go to dev, 67% stay in pool (as ETH) or are burned (FAIR).
+ *      Features:
+ *      - ETH -> FAIR swaps with slippage protection
+ *      - FAIR -> ETH swaps with slippage protection
+ *      - Donation mechanism for adding ETH liquidity
+ *      - Rescue functions for recovering excess tokens
  */
 contract FairAMM is ReentrancyGuard, Ownable {
+    /// @notice The FAIR token contract
     FAIR public immutable fairToken;
+    /// @notice Address receiving developer fees
     address public immutable deployer;
+    /// @notice Address of the claim contract (set once)
     address public claimContract;
 
+    /// @notice Tracked ETH balance in the pool
     uint256 public ethBalance;
+    /// @notice Tracked FAIR balance in the pool
     uint256 public fairBalance;
 
+    /// @notice Swap fee in basis points (30 = 0.3%)
     uint256 public constant SWAP_FEE_BASIS_POINTS = 30;
+    /// @notice Share of fees going to developer (33%)
     uint256 public constant FEE_SHARE = 33;
+    /// @notice Basis points denominator
     uint256 public constant BASIS_POINTS = 10000;
+    /// @notice Minimum liquidity threshold
     uint256 public constant MINIMUM_LIQUIDITY = 1000;
 
+    /// @notice Total ETH fees sent to developer
     uint256 public totalFeesToDev;
+    /// @notice Total FAIR tokens burned from fees
     uint256 public totalFairsBurned;
 
+    /// @notice Emitted on successful swap
     event Swap(address indexed sender, bool ethIn, uint256 amountIn, uint256 amountOut, uint256 fee);
+    /// @notice Emitted when ETH is donated to the pool
     event Donate(address indexed sender, uint256 ethAmount);
+    /// @notice Emitted when fees are collected
     event FeesCollected(uint256 devFee, uint256 burnAmount);
+    /// @notice Emitted when claim contract is set
     event ClaimContractSet(address indexed claimContract);
+    /// @notice Emitted when FAIR liquidity is added
     event LiquidityAdded(address indexed sender, uint256 amount);
+    /// @notice Emitted when excess ETH is rescued
     event ETHRescued(uint256 amount);
+    /// @notice Emitted when excess tokens are rescued
     event TokensRescued(address indexed token, uint256 amount);
 
+    /// @notice Thrown when pool has no liquidity
     error NoLiquidity();
+    /// @notice Thrown when output amount is less than minimum
     error InsufficientOutput();
+    /// @notice Thrown when amount is zero
     error InvalidAmount();
+    /// @notice Thrown when unauthorized caller
     error Unauthorized();
+    /// @notice Thrown when trying to set already-set address
     error AlreadySet();
+    /// @notice Thrown when zero address provided
     error ZeroAddress();
 
+    /// @notice Constructor initializes the AMM
+    /// @param _fairToken Address of the FAIR token contract
+    /// @param _deployer Address to receive developer fees
+    /// @param initialOwner Address that will own the contract
     constructor(address _fairToken, address _deployer, address initialOwner) Ownable(initialOwner) {
         if (_fairToken == address(0) || _deployer == address(0) || initialOwner == address(0)) revert ZeroAddress();
         fairToken = FAIR(_fairToken);
@@ -158,6 +191,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
 
     function _burnFees(uint256 burnAmount) internal {
         if (burnAmount > 0) {
+            require(fairToken.balanceOf(address(this)) >= burnAmount, "Insufficient balance for burn");
             fairToken.burnFrom(address(this), burnAmount);
             totalFairsBurned += burnAmount;
             emit FeesCollected(0, burnAmount);
@@ -169,6 +203,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
     /// @param amount Amount of FAIR to add to tracked balance
     function addFairLiquidity(uint256 amount) external {
         if (msg.sender != claimContract && msg.sender != owner()) revert Unauthorized();
+        if (amount == 0) revert InvalidAmount();
         uint256 newFairBalance = fairBalance + amount;
         require(fairToken.balanceOf(address(this)) >= newFairBalance, "Insufficient token balance");
         fairBalance = newFairBalance;

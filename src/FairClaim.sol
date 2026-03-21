@@ -13,45 +13,77 @@ import "./FairAMM.sol";
 /**
  * @title FairClaim
  * @notice Whitelist-based token claiming with referral rewards
- * @dev Uses merkle proofs for whitelist verification and EIP-712 typed signatures for invites.
+ * @dev Uses merkle proofs for whitelist verification and EIP-712 typed signature for invites.
  *      Bootstrap phase (first 100 claims) has no inviter requirement.
+ *      Key features:
+ *      - Merkle proof-based whitelist verification
+ *      - Multi-level referral rewards (up to 4 levels)
+ *      - EIP-712 typed signatures for secure invites
+ *      - Claim window with start/end timestamps
+ *      - Pausable for emergency situations
  */
 contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     using ECDSA for bytes32;
 
+    /// @notice The FAIR token contract
     FAIR public immutable fairToken;
+    /// @notice The AMM contract
     FairAMM public immutable amm;
+    /// @notice Merkle root for whitelist verification
     bytes32 public immutable whitelistRoot;
 
+    /// @notice Total FAIR tokens distributed per claim
     uint256 public constant FAIR_PER_CLAIM = 100 * 1e18;
+    /// @notice Share going to the claimant
     uint256 public constant CLAIMANT_SHARE = 90 * 1e18;
+    /// @notice Budget reserved for referral rewards
     uint256 public constant REFERRAL_BUDGET = 4 * 1e18;
+    /// @notice Base share going to AMM liquidity
     uint256 public constant AMM_BASE_SHARE = 6 * 1e18;
+    /// @notice Number of bootstrap claims (no inviter needed)
     uint256 public constant BOOTSTRAP_COUNT = 100;
+    /// @notice Number of invite slots per member
     uint256 public constant INVITE_SLOTS_PER_MEMBER = 4;
+    /// @notice Maximum referral levels for rewards
     uint256 public constant MAX_REFERRAL_LEVELS = 4;
+    /// @notice Reward per referral level
     uint256 public constant REFERRAL_REWARD_PER_LEVEL = 1 * 1e18;
+    /// @notice Maximum merkle proof length
     uint256 public constant MAX_PROOF_LENGTH = 32;
 
+    /// @notice Total number of claims processed
     uint256 public totalClaims;
+    /// @notice Start timestamp for claim window (0 = no restriction)
     uint256 public claimWindowStart;
+    /// @notice End timestamp for claim window (0 = no restriction)
     uint256 public claimWindowEnd;
 
+    /// @notice Mapping of addresses that have claimed
     mapping(address => bool) public hasClaimed;
+    /// @notice Mapping of invitee to their inviter
     mapping(address => address) public inviterOf;
+    /// @notice Mapping of inviter to number of slots used
     mapping(address => uint256) public inviteSlotsUsed;
+    /// @notice Mapping of used invite pair hashes
     mapping(bytes32 => bool) public usedInvitePairs;
+    /// @notice Mapping of inviter to used slot indices
     mapping(address => mapping(uint256 => bool)) public usedSlotIndex;
 
+    /// @notice Emitted on successful claim
     event Claimed(address indexed claimant, address indexed inviter, uint256 claimantAmount, uint256 ammAmount);
+    /// @notice Emitted on referral reward distribution
     event ReferralReward(address indexed recipient, address indexed claimant, uint256 amount, uint8 level);
+    /// @notice Emitted on bootstrap claim
     event BootstrapClaim(address indexed claimant);
+    /// @notice Emitted when claim window is updated
     event ClaimWindowSet(uint256 start, uint256 end);
 
+    /// @notice EIP-712 typehash for invite messages
     bytes32 public constant INVITE_MESSAGE_TYPEHASH = keccak256(
         "InviteMessage(address inviter,address invitee,address claimContract,uint256 chainId,uint256 slotIndex,uint256 deadline)"
     );
 
+    /// @notice Struct for EIP-712 typed invite message
     struct InviteMessage {
         address inviter;
         address invitee;
@@ -61,24 +93,48 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         uint256 deadline;
     }
 
+    /// @notice Thrown when address has already claimed
     error AlreadyClaimed();
+    /// @notice Thrown when merkle proof is invalid
     error InvalidProof();
+    /// @notice Thrown when AMM has no liquidity
     error NoLiquidity();
+    /// @notice Thrown when whitelist root is not set
     error WhitelistNotSet();
+    /// @notice Thrown when invite has expired
     error InviteExpired();
+    /// @notice Thrown when invite pair was already used
     error InviteAlreadyUsed();
+    /// @notice Thrown when slot index was already used
     error SlotAlreadyUsed();
+    /// @notice Thrown when inviter has no invite slots
     error NoInviteSlots();
+    /// @notice Thrown when signature is invalid
     error InvalidSignature();
+    /// @notice Thrown when signature length is invalid
     error InvalidSignatureLength();
+    /// @notice Thrown when claim window is not open
     error ClaimWindowNotOpen();
+    /// @notice Thrown when claim window is closed
     error ClaimWindowClosed();
+    /// @notice Thrown when inviter is invalid
     error InvalidInviter();
+    /// @notice Thrown when slot index is invalid
     error InvalidSlotIndex();
+    /// @notice Thrown when zero address is provided
     error ZeroAddress();
+    /// @notice Thrown when trying to self-invite
     error SelfInvite();
+    /// @notice Thrown when claim window parameters are invalid
     error InvalidClaimWindow();
 
+    /// @notice Constructor initializes the claim contract
+    /// @param _fairToken Address of the FAIR token contract
+    /// @param _amm Address of the AMM contract
+    /// @param _whitelistRoot Merkle root for whitelist verification
+    /// @param _claimWindowStart Start timestamp for claim window (0 = no restriction)
+    /// @param _claimWindowEnd End timestamp for claim window (0 = no restriction)
+    /// @param initialOwner Address that will own the contract
     constructor(
         address _fairToken,
         address payable _amm,

@@ -9,23 +9,36 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 /**
  * @title FAIR Governance Token
  * @notice ERC20 token with voting capabilities for FairDAO governance
- * @dev Minting is restricted to AMM and Claim contracts. Has a fixed max supply.
+ * @dev Minting is restricted to AMM and Claim contracts. Has a fixed max supply of 1M tokens.
+ *      Inherits from ERC20, ERC20Permit, ERC20Votes, and Ownable for full governance support.
  */
 contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
+    /// @notice Address of the FairAMM contract authorized to mint/burn
     address public amm;
+    /// @notice Address of the FairClaim contract authorized to mint
     address public claimContract;
 
+    /// @notice Maximum supply cap of 1,000,000 FAIR tokens
     uint256 public constant MAX_SUPPLY = 1_000_000 * 1e18;
 
+    /// @notice Emitted when AMM address is set
     event AMMSet(address indexed amm);
+    /// @notice Emitted when claim contract address is set
     event ClaimContractSet(address indexed claimContract);
+    /// @notice Emitted when tokens are burned
     event Burn(address indexed account, uint256 amount);
 
+    /// @notice Thrown when trying to set an already-set address
     error AlreadySet();
+    /// @notice Thrown when unauthorized caller attempts mint/burn
     error Unauthorized();
+    /// @notice Thrown when zero address is provided
     error ZeroAddress();
+    /// @notice Thrown when minting would exceed MAX_SUPPLY
     error SupplyExceeded();
 
+    /// @notice Constructor initializes the FAIR token
+    /// @param initialOwner Address that will own the contract and can set AMM/claim addresses
     constructor(address initialOwner)
         ERC20("FAIR Governance Token", "FAIR")
         ERC20Permit("FAIR Governance Token")
