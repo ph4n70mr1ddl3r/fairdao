@@ -23,9 +23,9 @@ contract FairGovernor is
     GovernorTimelockControl
 {
     FAIR public immutable fairToken;
-    
+
     error ZeroAddress();
-    
+
     constructor(
         FAIR _token,
         TimelockController _timelock,
@@ -43,33 +43,23 @@ contract FairGovernor is
         if (address(_token) == address(0) || address(_timelock) == address(0)) revert ZeroAddress();
         fairToken = _token;
     }
-    
+
     function votingDelay() public view override(Governor, GovernorSettings) returns (uint256) {
         return super.votingDelay();
     }
-    
+
     function votingPeriod() public view override(Governor, GovernorSettings) returns (uint256) {
         return super.votingPeriod();
     }
-    
-    function quorum(uint256 blockNumber)
-        public
-        view
-        override(Governor, GovernorVotesQuorumFraction)
-        returns (uint256)
-    {
+
+    function quorum(uint256 blockNumber) public view override(Governor, GovernorVotesQuorumFraction) returns (uint256) {
         return super.quorum(blockNumber);
     }
-    
-    function state(uint256 proposalId)
-        public
-        view
-        override(Governor, GovernorTimelockControl)
-        returns (ProposalState)
-    {
+
+    function state(uint256 proposalId) public view override(Governor, GovernorTimelockControl) returns (ProposalState) {
         return super.state(proposalId);
     }
-    
+
     function proposalNeedsQueuing(uint256 proposalId)
         public
         view
@@ -78,16 +68,11 @@ contract FairGovernor is
     {
         return super.proposalNeedsQueuing(proposalId);
     }
-    
-    function proposalThreshold()
-        public
-        view
-        override(Governor, GovernorSettings)
-        returns (uint256)
-    {
+
+    function proposalThreshold() public view override(Governor, GovernorSettings) returns (uint256) {
         return super.proposalThreshold();
     }
-    
+
     function _executeOperations(
         uint256 proposalId,
         address[] memory targets,
@@ -97,7 +82,7 @@ contract FairGovernor is
     ) internal override(Governor, GovernorTimelockControl) {
         super._executeOperations(proposalId, targets, values, calldatas, descriptionHash);
     }
-    
+
     function _cancel(
         address[] memory targets,
         uint256[] memory values,
@@ -106,16 +91,11 @@ contract FairGovernor is
     ) internal override(Governor, GovernorTimelockControl) returns (uint256) {
         return super._cancel(targets, values, calldatas, descriptionHash);
     }
-    
-    function _executor()
-        internal
-        view
-        override(Governor, GovernorTimelockControl)
-        returns (address)
-    {
+
+    function _executor() internal view override(Governor, GovernorTimelockControl) returns (address) {
         return super._executor();
     }
-    
+
     function _queueOperations(
         uint256 proposalId,
         address[] memory targets,
