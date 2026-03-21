@@ -291,23 +291,142 @@ contract FairDAOTest is Test {
         vm.deal(owner, 10 ether);
         vm.prank(owner);
         amm.donate{value: 1 ether}();
-        
+
         bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
         bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
-        
+
         bytes32[] memory proof = new bytes32[](2);
         proof[0] = leaf2;
         proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
-        
+
         vm.prank(user1);
         claim.claim(proof);
-        
+
         bytes32[] memory proof2 = new bytes32[](2);
         proof2[0] = leaf1;
         proof2[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
-        
+
         vm.prank(user2);
         vm.expectRevert(FairClaim.InvalidSlotIndex.selector);
         claim.claimWithInvite(proof2, user1, 100, "", "", block.timestamp + 1 hours);
+    }
+
+    function test_Claim_WithInviteHappyPath() public {
+        uint256 inviterKey = 0xabc123;
+        uint256 inviteeKey = 0xdef456;
+        address inviter = vm.addr(inviterKey);
+        address invitee = vm.addr(inviteeKey);
+
+        vm.startPrank(owner);
+        FAIR testFair = new FAIR(owner);
+        FairAMM testAmm = new FairAMM(address(testFair), owner, owner);
+
+        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(inviter))));
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(invitee))));
+        bytes32 leaf3 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
+
+        bytes32 testRoot = _hashPair(_hashPair(leaf1, leaf2), leaf3);
+
+        FairClaim testClaim = new FairClaim(
+            address(testFair),
+            payable(address(testAmm)),
+            testRoot,
+            0,
+            0,
+            owner
+        );
+
+        testFair.setAMM(address(testAmm));
+        testFair.setClaimContract(address(testClaim));
+        testAmm.setClaimContract(address(testClaim));
+        vm.stopPrank();
+
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        testAmm.donate{value: 1 ether}();
+
+        bytes32[] memory inviterProof = new bytes32[](2);
+        inviterProof[0] = leaf2;
+        inviterProof[1] = leaf3;
+
+        vm.prank(inviter);
+        testClaim.claim(inviterProof);
+
+        assertEq(testClaim.inviterOf(inviter), address(0));
+        assertEq(testClaim.hasClaimed(inviter), true);
+
+        bytes32[] memory inviteeProof = new bytes32[](2);
+        inviteeProof[0] = leaf1;
+        inviteeProof[1] = leaf3;
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 slotIndex = 0;
+
+        bytes32 digest = _hashTypedDataV4(
+            address(testClaim),
+            keccak256(abi.encode(
+                testClaim.INVITE_MESSAGE_TYPEHASH(),
+                inviter,
+                invitee,
+                address(testClaim),
+                block.chainid,
+                slotIndex,
+                deadline
+            ))
+        );
+
+        bytes memory sigInviter = _sign(digest, inviterKey);
+        bytes memory sigInvitee = _sign(digest, inviteeKey);
+
+        vm.prank(invitee);
+        testClaim.claimWithInvite(inviteeProof, inviter, slotIndex, sigInviter, sigInvitee, deadline);
+
+        assertEq(testClaim.hasClaimed(invitee), true);
+        assertEq(testClaim.inviterOf(invitee), inviter);
+        assertEq(testFair.balanceOf(invitee), testClaim.CLAIMANT_SHARE());
+        assertEq(testFair.balanceOf(inviter), testClaim.CLAIMANT_SHARE() + testClaim.REFERRAL_REWARD_PER_LEVEL());
+    }
+
+    function test_Claim_RevertsWhenWhitelistNotSet() public {
+        vm.startPrank(owner);
+        FairClaim emptyClaim = new FairClaim(
+            address(fair),
+            payable(address(amm)),
+            bytes32(0),
+            0,
+            0,
+            owner
+        );
+        vm.stopPrank();
+
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32[] memory proof = new bytes32[](1);
+        proof[0] = bytes32(0);
+
+        vm.prank(user1);
+        vm.expectRevert(FairClaim.WhitelistNotSet.selector);
+        emptyClaim.claim(proof);
+    }
+
+    function _hashTypedDataV4(address claimingContract, bytes32 structHash) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparatorV4(claimingContract), structHash));
+    }
+
+    function _domainSeparatorV4(address claimingContract) internal view returns (bytes32) {
+        return keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+            keccak256(bytes("FairDAO Claim")),
+            keccak256(bytes("1")),
+            block.chainid,
+            claimingContract
+        ));
+    }
+
+    function _sign(bytes32 digest, uint256 privateKey) internal pure returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+        return abi.encodePacked(r, s, v);
     }
 }

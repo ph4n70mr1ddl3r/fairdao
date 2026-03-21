@@ -58,6 +58,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     error AlreadyClaimed();
     error InvalidProof();
     error NoLiquidity();
+    error WhitelistNotSet();
     error InviteExpired();
     error InviteAlreadyUsed();
     error SlotAlreadyUsed();
@@ -209,6 +210,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     }
     
     function _verifyMerkleProof(bytes32[] calldata proof, address account) internal view returns (bool) {
+        if (whitelistRoot == bytes32(0)) revert WhitelistNotSet();
         bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(account))));
         return MerkleProof.verify(proof, whitelistRoot, leaf);
     }

@@ -19,8 +19,11 @@ contract DeployFairDAO is Script {
     uint256 public constant QUORUM_NUMERATOR = 4;
     uint256 public constant TIMELOCK_DELAY = 2 days;
 
+    error InvalidPrivateKey();
+
     function run() external returns (FAIR, FairAMM, FairClaim, FairGovernor, TimelockController) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        if (deployerPrivateKey == 0) revert InvalidPrivateKey();
         vm.startBroadcast(deployerPrivateKey);
         
         address deployer = vm.addr(deployerPrivateKey);
