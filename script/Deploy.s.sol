@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 import {Script} from "forge-std/Script.sol";
 import {FAIR} from "../src/FAIR.sol";
@@ -41,6 +41,8 @@ contract DeployFairDAO is Script {
 
     /// @notice Thrown when private key is invalid
     error InvalidPrivateKey();
+    /// @notice Thrown when whitelist root is not set
+    error WhitelistRootNotSet();
 
     /// @notice Deploys all FairDAO contracts
     /// @return fair The FAIR token contract
@@ -51,6 +53,7 @@ contract DeployFairDAO is Script {
     function run() external returns (FAIR, FairAMM, FairClaim, FairGovernor, TimelockController) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         if (deployerPrivateKey == 0) revert InvalidPrivateKey();
+        if (WHITELIST_ROOT == bytes32(0)) revert WhitelistRootNotSet();
         vm.startBroadcast(deployerPrivateKey);
 
         address deployer = vm.addr(deployerPrivateKey);

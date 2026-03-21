@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -71,6 +71,14 @@ contract FairAMM is ReentrancyGuard, Ownable {
     error AlreadySet();
     /// @notice Thrown when zero address provided
     error ZeroAddress();
+    /// @notice Thrown when ETH transfer fails
+    error ETHTransferFailed();
+    /// @notice Thrown when token transfer fails
+    error TokenTransferFailed();
+    /// @notice Thrown when trying to rescue more than excess
+    error InsufficientExcess();
+    /// @notice Thrown when token balance is insufficient for burn
+    error InsufficientBurnBalance();
 
     /// @notice Constructor initializes the AMM
     /// @param _fairToken Address of the FAIR token contract
@@ -132,7 +140,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         fairBalance = newFairBalance;
 
         _sendDevFee(devFee);
-        require(fairToken.transfer(msg.sender, amountOut), "Transfer failed");
+        if (!fairToken.transfer(msg.sender, amountOut)) revert TokenTransferFailed();
 
         emit Swap(msg.sender, true, msg.value, amountOut, fee);
     }
@@ -171,27 +179,29 @@ contract FairAMM is ReentrancyGuard, Ownable {
         fairBalance = newFairBalance + poolFee;
         ethBalance = newEthBalance;
 
-        require(fairToken.transferFrom(msg.sender, address(this), amountIn), "TransferFrom failed");
+        if (!fairToken.transferFrom(msg.sender, address(this), amountIn)) revert TokenTransferFailed();
         _burnFees(burnAmount);
 
         (bool success,) = payable(msg.sender).call{value: amountOut}("");
-        require(success, "ETH transfer failed");
+        if (!success) revert ETHTransferFailed();
 
         emit Swap(msg.sender, false, amountIn, amountOut, fee);
     }
 
+    /// @dev Sends developer fee in ETH to deployer address
     function _sendDevFee(uint256 devFee) internal {
         if (devFee > 0) {
             (bool success,) = payable(deployer).call{value: devFee}("");
-            require(success, "Dev fee transfer failed");
+            if (!success) revert ETHTransferFailed();
             totalFeesToDev += devFee;
             emit FeesCollected(devFee, 0);
         }
     }
 
+    /// @dev Burns FAIR tokens from the pool as part of fee distribution
     function _burnFees(uint256 burnAmount) internal {
         if (burnAmount > 0) {
-            require(fairToken.balanceOf(address(this)) >= burnAmount, "Insufficient balance for burn");
+            if (fairToken.balanceOf(address(this)) < burnAmount) revert InsufficientBurnBalance();
             fairToken.burnFrom(address(this), burnAmount);
             totalFairsBurned += burnAmount;
             emit FeesCollected(0, burnAmount);
@@ -205,7 +215,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (msg.sender != claimContract && msg.sender != owner()) revert Unauthorized();
         if (amount == 0) revert InvalidAmount();
         uint256 newFairBalance = fairBalance + amount;
-        require(fairToken.balanceOf(address(this)) >= newFairBalance, "Insufficient token balance");
+        if (fairToken.balanceOf(address(this)) < newFairBalance) revert InsufficientOutput();
         fairBalance = newFairBalance;
         emit LiquidityAdded(msg.sender, amount);
     }
@@ -248,9 +258,9 @@ contract FairAMM is ReentrancyGuard, Ownable {
     /// @param amount Amount of ETH to rescue
     function rescueETH(uint256 amount) external onlyOwner {
         uint256 excess = address(this).balance - ethBalance;
-        require(amount <= excess, "Cannot rescue tracked ETH");
+        if (amount > excess) revert InsufficientExcess();
         (bool success,) = payable(owner()).call{value: amount}("");
-        require(success, "Rescue failed");
+        if (!success) revert ETHTransferFailed();
         emit ETHRescued(amount);
     }
 
@@ -260,9 +270,9 @@ contract FairAMM is ReentrancyGuard, Ownable {
     function rescueTokens(address token, uint256 amount) external onlyOwner {
         if (token == address(fairToken)) {
             uint256 excess = fairToken.balanceOf(address(this)) - fairBalance;
-            require(amount <= excess, "Cannot rescue tracked FAIR");
+            if (amount > excess) revert InsufficientExcess();
         }
-        require(IERC20(token).transfer(owner(), amount), "Transfer failed");
+        if (!IERC20(token).transfer(owner(), amount)) revert TokenTransferFailed();
         emit TokensRescued(token, amount);
     }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
@@ -185,7 +185,9 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         bool isBootstrap = totalClaims < BOOTSTRAP_COUNT;
 
         hasClaimed[msg.sender] = true;
-        totalClaims++;
+        unchecked {
+            totalClaims++;
+        }
 
         if (isBootstrap) {
             inviterOf[msg.sender] = address(0);
@@ -264,10 +266,14 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
 
         usedInvitePairs[invitePairHash] = true;
         usedSlotIndex[inviter][slotIndex] = true;
-        inviteSlotsUsed[inviter]++;
+        unchecked {
+            inviteSlotsUsed[inviter]++;
+        }
         hasClaimed[msg.sender] = true;
         inviterOf[msg.sender] = inviter;
-        totalClaims++;
+        unchecked {
+            totalClaims++;
+        }
 
         uint256 referralUsed = _distributeReferralRewards(inviter, msg.sender);
         uint256 ammDonation = AMM_BASE_SHARE + (REFERRAL_BUDGET - referralUsed);
@@ -279,6 +285,10 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         emit Claimed(msg.sender, inviter, CLAIMANT_SHARE, ammDonation);
     }
 
+    /// @dev Distributes referral rewards up the invite chain (max 4 levels)
+    /// @param inviter The direct inviter of the claimant
+    /// @param claimant The address that just claimed
+    /// @return totalDistributed Total FAIR tokens distributed as referral rewards
     function _distributeReferralRewards(address inviter, address claimant) internal returns (uint256 totalDistributed) {
         address currentInviter = inviter;
 
@@ -290,11 +300,16 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         }
     }
 
+    /// @dev Validates that the current timestamp is within the claim window
     function _validateClaimWindow() internal view {
         if (claimWindowStart > 0 && block.timestamp < claimWindowStart) revert ClaimWindowNotOpen();
         if (claimWindowEnd > 0 && block.timestamp > claimWindowEnd) revert ClaimWindowClosed();
     }
 
+    /// @dev Verifies a merkle proof for whitelist eligibility
+    /// @param proof The merkle proof
+    /// @param account The address to verify
+    /// @return True if the proof is valid
     function _verifyMerkleProof(bytes32[] calldata proof, address account) internal view returns (bool) {
         if (whitelistRoot == bytes32(0)) revert WhitelistNotSet();
         bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(account))));

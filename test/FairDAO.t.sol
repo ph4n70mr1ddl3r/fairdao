@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {FAIR} from "../src/FAIR.sol";
@@ -271,7 +271,7 @@ contract FairDAOTest is Test {
         amm.donate{value: 1 ether}();
 
         vm.prank(owner);
-        vm.expectRevert("Cannot rescue tracked ETH");
+        vm.expectRevert(FairAMM.InsufficientExcess.selector);
         amm.rescueETH(0.1 ether);
     }
 
