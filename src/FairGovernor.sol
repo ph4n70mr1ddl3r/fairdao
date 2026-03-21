@@ -9,6 +9,11 @@ import "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFractio
 import "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
 import "./FAIR.sol";
 
+/**
+ * @title FairGovernor
+ * @notice Governance contract for FairDAO with timelock execution
+ * @dev Standard OpenZeppelin Governor with 4% quorum threshold and timelock control.
+ */
 contract FairGovernor is
     Governor,
     GovernorSettings,

@@ -6,6 +6,11 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+/**
+ * @title FAIR Governance Token
+ * @notice ERC20 token with voting capabilities for FairDAO governance
+ * @dev Minting is restricted to AMM and Claim contracts. Has a fixed max supply.
+ */
 contract FAIR is ERC20, ERC20Permit, ERC20Votes, Ownable {
     address public amm;
     address public claimContract;

@@ -6,6 +6,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./FAIR.sol";
 
+/**
+ * @title FairAMM
+ * @notice Automated Market Maker for FAIR/ETH trading pair
+ * @dev Uses constant product formula (x*y=k) with 0.3% swap fee.
+ *      33% of fees go to dev, 67% stay in pool (as ETH) or are burned (FAIR).
+ */
 contract FairAMM is ReentrancyGuard, Ownable {
     FAIR public immutable fairToken;
     address public immutable deployer;
@@ -75,6 +81,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         amountOut = _fairBalance - newFairBalance;
         if (amountOut < amountOutMin) revert InsufficientOutput();
         if (amountOut > _fairBalance) revert InsufficientOutput();
+        if (amountOut > fairToken.balanceOf(address(this))) revert InsufficientOutput();
         
         uint256 devFee = (fee * FEE_SHARE) / 100;
         uint256 poolFee = fee - devFee;

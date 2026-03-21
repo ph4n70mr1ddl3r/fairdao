@@ -10,6 +10,12 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./FAIR.sol";
 import "./FairAMM.sol";
 
+/**
+ * @title FairClaim
+ * @notice Whitelist-based token claiming with referral rewards
+ * @dev Uses merkle proofs for whitelist verification and EIP-712 typed signatures for invites.
+ *      Bootstrap phase (first 100 claims) has no inviter requirement.
+ */
 contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     using ECDSA for bytes32;
     
@@ -70,6 +76,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     error InvalidInviter();
     error InvalidSlotIndex();
     error ZeroAddress();
+    error SelfInvite();
     
     constructor(
         address _fairToken,
@@ -142,6 +149,7 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         if (!amm.hasLiquidity()) revert NoLiquidity();
         if (deadline < block.timestamp) revert InviteExpired();
         if (inviter == address(0)) revert InvalidInviter();
+        if (inviter == msg.sender) revert SelfInvite();
         if (!hasClaimed[inviter]) revert InvalidInviter();
         if (slotIndex >= INVITE_SLOTS_PER_MEMBER) revert InvalidSlotIndex();
         if (inviteSlotsUsed[inviter] >= INVITE_SLOTS_PER_MEMBER) revert NoInviteSlots();
