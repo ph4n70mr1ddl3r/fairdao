@@ -104,7 +104,6 @@ contract FairDAOTest is Test {
     }
 
     function test_Claim_RevertsWithNoLiquidity() public {
-        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
         bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
 
         bytes32[] memory proof = new bytes32[](2);
@@ -149,7 +148,6 @@ contract FairDAOTest is Test {
         vm.prank(owner);
         amm.donate{value: 1 ether}();
 
-        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
         bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
 
         bytes32[] memory proof = new bytes32[](2);
@@ -182,7 +180,6 @@ contract FairDAOTest is Test {
         vm.prank(owner);
         amm.donate{value: 1 ether}();
 
-        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
         bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
 
         bytes32[] memory proof = new bytes32[](2);
@@ -212,7 +209,6 @@ contract FairDAOTest is Test {
         vm.prank(owner);
         amm.donate{value: 1 ether}();
 
-        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
         bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
 
         bytes32[] memory proof = new bytes32[](2);
@@ -250,7 +246,6 @@ contract FairDAOTest is Test {
         vm.prank(owner);
         amm.donate{value: 1 ether}();
 
-        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
         bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
 
         bytes32[] memory proof = new bytes32[](2);
@@ -396,17 +391,17 @@ contract FairDAOTest is Test {
         uint256 key0 = 0xabc123;
         uint256 key1 = 0xabc124;
         uint256 key2 = 0xabc125;
-        address user0 = vm.addr(key0);
-        address user1 = vm.addr(key1);
-        address user2 = vm.addr(key2);
+        address localUser0 = vm.addr(key0);
+        address localUser1 = vm.addr(key1);
+        address localUser2 = vm.addr(key2);
 
         vm.startPrank(owner);
         FAIR testFair = new FAIR(owner);
         FairAMM testAmm = new FairAMM(address(testFair), owner, owner);
 
-        bytes32 leaf0 = keccak256(bytes.concat(keccak256(abi.encode(user0))));
-        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
-        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+        bytes32 leaf0 = keccak256(bytes.concat(keccak256(abi.encode(localUser0))));
+        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(localUser1))));
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(localUser2))));
 
         bytes32 testRoot = _hashPair(_hashPair(leaf0, leaf1), leaf2);
 
@@ -424,7 +419,7 @@ contract FairDAOTest is Test {
         bytes32[] memory proof0 = new bytes32[](2);
         proof0[0] = leaf1;
         proof0[1] = leaf2;
-        vm.prank(user0);
+        vm.prank(localUser0);
         testClaim.claim(proof0);
 
         uint256 deadline = block.timestamp + 1 hours;
@@ -435,8 +430,8 @@ contract FairDAOTest is Test {
             keccak256(
                 abi.encode(
                     testClaim.INVITE_MESSAGE_TYPEHASH(),
-                    user0,
-                    user1,
+                    localUser0,
+                    localUser1,
                     address(testClaim),
                     block.chainid,
                     slotIndex0,
@@ -452,8 +447,8 @@ contract FairDAOTest is Test {
         proof1[0] = leaf0;
         proof1[1] = leaf2;
 
-        vm.prank(user1);
-        testClaim.claimWithInvite(proof1, user0, slotIndex0, sigInviter0, sigInvitee0, deadline);
+        vm.prank(localUser1);
+        testClaim.claimWithInvite(proof1, localUser0, slotIndex0, sigInviter0, sigInvitee0, deadline);
 
         uint256 slotIndex1 = 0;
 
@@ -462,8 +457,8 @@ contract FairDAOTest is Test {
             keccak256(
                 abi.encode(
                     testClaim.INVITE_MESSAGE_TYPEHASH(),
-                    user1,
-                    user2,
+                    localUser1,
+                    localUser2,
                     address(testClaim),
                     block.chainid,
                     slotIndex1,
@@ -478,12 +473,12 @@ contract FairDAOTest is Test {
         bytes32[] memory proof2 = new bytes32[](1);
         proof2[0] = _hashPair(leaf0, leaf1);
 
-        vm.prank(user2);
-        testClaim.claimWithInvite(proof2, user1, slotIndex1, sigInviter1, sigInvitee1, deadline);
+        vm.prank(localUser2);
+        testClaim.claimWithInvite(proof2, localUser1, slotIndex1, sigInviter1, sigInvitee1, deadline);
 
-        assertEq(testFair.balanceOf(user2), testClaim.CLAIMANT_SHARE());
-        assertEq(testFair.balanceOf(user1), testClaim.CLAIMANT_SHARE() + 1 * 1e18);
-        assertEq(testFair.balanceOf(user0), testClaim.CLAIMANT_SHARE() + 2 * 1e18);
+        assertEq(testFair.balanceOf(localUser2), testClaim.CLAIMANT_SHARE());
+        assertEq(testFair.balanceOf(localUser1), testClaim.CLAIMANT_SHARE() + 1 * 1e18);
+        assertEq(testFair.balanceOf(localUser0), testClaim.CLAIMANT_SHARE() + 2 * 1e18);
     }
 
     function test_Claim_ClaimWindowValidation() public {
