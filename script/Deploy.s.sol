@@ -47,7 +47,7 @@ contract DeployFairDAO is Script {
     error SetupValidationFailed();
 
     /// @dev Validates that all contract addresses are properly configured
-    function _validateSetup(FAIR fair_, FairAMM amm_, FairClaim claim_) internal pure {
+    function _validateSetup(FAIR fair_, FairAMM amm_, FairClaim claim_) internal view {
         if (fair_.amm() != address(amm_)) revert SetupValidationFailed();
         if (fair_.claimContract() != address(claim_)) revert SetupValidationFailed();
         if (amm_.claimContract() != address(claim_)) revert SetupValidationFailed();

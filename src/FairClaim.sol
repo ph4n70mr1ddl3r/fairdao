@@ -151,6 +151,9 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         whitelistRoot = _whitelistRoot;
         claimWindowStart = _claimWindowStart;
         claimWindowEnd = _claimWindowEnd;
+        if (_claimWindowStart != 0 || _claimWindowEnd != 0) {
+            emit ClaimWindowSet(_claimWindowStart, _claimWindowEnd);
+        }
     }
 
     /// @notice Set the claim window period
@@ -320,15 +323,15 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     }
 
     /// @notice Check if currently in bootstrap phase (first 100 claims)
-    /// @return True if in bootstrap phase
-    function isBootstrapPhase() external view returns (bool) {
+    /// @return isBootstrap True if in bootstrap phase
+    function isBootstrapPhase() external view returns (bool isBootstrap) {
         return totalClaims < BOOTSTRAP_COUNT;
     }
 
     /// @notice Get remaining invite slots for a user
     /// @param user Address to check
-    /// @return Number of remaining invite slots
-    function remainingInviteSlots(address user) external view returns (uint256) {
+    /// @return remaining Number of remaining invite slots
+    function remainingInviteSlots(address user) external view returns (uint256 remaining) {
         if (!hasClaimed[user]) return 0;
         return INVITE_SLOTS_PER_MEMBER - inviteSlotsUsed[user];
     }

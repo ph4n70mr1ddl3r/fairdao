@@ -32,8 +32,8 @@ contract FairAMM is ReentrancyGuard, Ownable {
 
     /// @notice Swap fee in basis points (30 = 0.3%)
     uint256 public constant SWAP_FEE_BASIS_POINTS = 30;
-    /// @notice Share of fees going to developer (33%)
-    uint256 public constant FEE_SHARE = 33;
+    /// @notice Fee split denominator (3-way split: pool/burn/dev)
+    uint256 public constant FEE_SPLIT_DENOMINATOR = 3;
     /// @notice Basis points denominator
     uint256 public constant BASIS_POINTS = 10000;
     /// @notice Minimum liquidity threshold
@@ -89,8 +89,10 @@ contract FairAMM is ReentrancyGuard, Ownable {
     /// @notice Constructor initializes the AMM
     /// @param _fairToken Address of the FAIR token contract
     /// @param _deployer Address to receive developer fees
-    /// @param initialOwner Address that will own the contract
-    constructor(address _fairToken, address _deployer, address initialOwner) Ownable(initialOwner) {
+    /// @param initialOwner Address that will own the contract and can set claim address
+    constructor(address _fairToken, address _deployer, address initialOwner)
+        Ownable(initialOwner)
+    {
         if (_fairToken == address(0) || _deployer == address(0) || initialOwner == address(0)) revert ZeroAddress();
         fairToken = FAIR(_fairToken);
         deployer = _deployer;
@@ -112,6 +114,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
     }
 
     /// @notice Swap ETH for FAIR tokens
+    /// @dev Fee split: 0.1% ETH to dev, 0.1% ETH to pool, 0.1% ETH worth of FAIR burned
     /// @param amountOutMin Minimum FAIR tokens to receive (slippage protection)
     /// @return amountOut Actual amount of FAIR tokens received
     function swapEthForFair(uint256 amountOutMin) external payable nonReentrant returns (uint256 amountOut) {
@@ -122,13 +125,22 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (_fairBalance < MINIMUM_LIQUIDITY) revert NoLiquidity();
 
         uint256 fee = (msg.value * SWAP_FEE_BASIS_POINTS) / BASIS_POINTS;
+        uint256 devFee;
+        uint256 poolFee;
+        uint256 burnFeeEth;
+        unchecked {
+            devFee = fee / FEE_SPLIT_DENOMINATOR;
+            poolFee = fee / FEE_SPLIT_DENOMINATOR;
+            burnFeeEth = fee - devFee - poolFee;
+        }
+
         uint256 amountInAfterFee;
         unchecked {
             amountInAfterFee = msg.value - fee;
         }
 
         uint256 k = _ethBalance * _fairBalance;
-        uint256 newEthBalance = _ethBalance + amountInAfterFee;
+        uint256 newEthBalance = _ethBalance + amountInAfterFee + poolFee;
         uint256 newFairBalance = (k / newEthBalance) + 1;
 
         amountOut = _fairBalance - newFairBalance;
@@ -136,22 +148,25 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (amountOut < amountOutMin) revert InsufficientOutput();
         if (amountOut > fairToken.balanceOf(address(this))) revert InsufficientTokenBalance();
 
-        uint256 devFee = (fee * FEE_SHARE) / 100;
-        uint256 poolFee;
-        unchecked {
-            poolFee = fee - devFee;
+        uint256 burnAmount = (burnFeeEth * newFairBalance) / newEthBalance;
+        if (burnAmount > 0) {
+            unchecked {
+                fairBalance = newFairBalance - burnAmount;
+            }
+        } else {
+            fairBalance = newFairBalance;
         }
-
-        ethBalance = newEthBalance + poolFee;
-        fairBalance = newFairBalance;
+        ethBalance = newEthBalance;
 
         _sendDevFee(devFee);
+        _burnFees(burnAmount);
         if (!fairToken.transfer(msg.sender, amountOut)) revert TokenTransferFailed();
 
         emit Swap(msg.sender, true, msg.value, amountOut, fee);
     }
 
     /// @notice Swap FAIR tokens for ETH
+    /// @dev Fee split: 0.1% FAIR burned. 0.1% FAIR to pool. 0.1% FAIR worth of ETH to dev
     /// @param amountIn Amount of FAIR tokens to swap
     /// @param amountOutMin Minimum ETH to receive (slippage protection)
     /// @return amountOut Actual amount of ETH received
@@ -163,13 +178,22 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (_ethBalance < MINIMUM_LIQUIDITY) revert NoLiquidity();
 
         uint256 fee = (amountIn * SWAP_FEE_BASIS_POINTS) / BASIS_POINTS;
+        uint256 burnFee;
+        uint256 poolFee;
+        uint256 devFeeFair;
+        unchecked {
+            burnFee = fee / FEE_SPLIT_DENOMINATOR;
+            poolFee = fee / FEE_SPLIT_DENOMINATOR;
+            devFeeFair = fee - burnFee - poolFee;
+        }
+
         uint256 amountInAfterFee;
         unchecked {
             amountInAfterFee = amountIn - fee;
         }
 
         uint256 k = _ethBalance * _fairBalance;
-        uint256 newFairBalance = _fairBalance + amountInAfterFee;
+        uint256 newFairBalance = _fairBalance + amountInAfterFee + poolFee;
         uint256 newEthBalance = (k / newFairBalance) + 1;
 
         amountOut = _ethBalance - newEthBalance;
@@ -177,17 +201,19 @@ contract FairAMM is ReentrancyGuard, Ownable {
         if (amountOut < amountOutMin) revert InsufficientOutput();
         if (amountOut > address(this).balance) revert InsufficientETHBalance();
 
-        uint256 burnAmount = (fee * FEE_SHARE) / 100;
-        uint256 poolFee;
-        unchecked {
-            poolFee = fee - burnAmount;
+        uint256 devFeeEth = (devFeeFair * newEthBalance) / newFairBalance;
+        if (devFeeEth > 0) {
+            unchecked {
+                ethBalance = newEthBalance - devFeeEth;
+            }
+        } else {
+            ethBalance = newEthBalance;
         }
-
-        fairBalance = newFairBalance + poolFee;
-        ethBalance = newEthBalance;
+        fairBalance = newFairBalance;
 
         if (!fairToken.transferFrom(msg.sender, address(this), amountIn)) revert TokenTransferFailed();
-        _burnFees(burnAmount);
+        _burnFees(burnFee);
+        _sendDevFee(devFeeEth);
 
         (bool success,) = payable(msg.sender).call{value: amountOut}("");
         if (!success) revert ETHTransferFailed();
@@ -233,12 +259,13 @@ contract FairAMM is ReentrancyGuard, Ownable {
     /// @notice Calculate expected output amount for a swap
     /// @param ethIn True if swapping ETH for FAIR, false for FAIR to ETH
     /// @param amountIn Input amount
-    /// @return Expected output amount
-    function getAmountOut(bool ethIn, uint256 amountIn) external view returns (uint256) {
+    /// @return amountOut Expected output amount
+    function getAmountOut(bool ethIn, uint256 amountIn) external view returns (uint256 amountOut) {
         if (amountIn == 0) return 0;
         if (ethBalance == 0 || fairBalance == 0) return 0;
 
         uint256 fee = (amountIn * SWAP_FEE_BASIS_POINTS) / BASIS_POINTS;
+        uint256 poolFee = fee / FEE_SPLIT_DENOMINATOR;
         uint256 amountInAfterFee;
         unchecked {
             amountInAfterFee = amountIn - fee;
@@ -247,19 +274,19 @@ contract FairAMM is ReentrancyGuard, Ownable {
         uint256 k = ethBalance * fairBalance;
 
         if (ethIn) {
-            uint256 newEthBalance = ethBalance + amountInAfterFee;
+            uint256 newEthBalance = ethBalance + amountInAfterFee + poolFee;
             uint256 newFairBalance = (k / newEthBalance) + 1;
             return fairBalance > newFairBalance ? fairBalance - newFairBalance : 0;
         } else {
-            uint256 newFairBalance = fairBalance + amountInAfterFee;
+            uint256 newFairBalance = fairBalance + amountInAfterFee + poolFee;
             uint256 newEthBalance = (k / newFairBalance) + 1;
             return ethBalance > newEthBalance ? ethBalance - newEthBalance : 0;
         }
     }
 
     /// @notice Check if the AMM has ETH liquidity
-    /// @return True if ETH balance > 0
-    function hasLiquidity() external view returns (bool) {
+    /// @return hasLiq True if ETH balance > 0
+    function hasLiquidity() external view returns (bool hasLiq) {
         return ethBalance > 0;
     }
 
@@ -277,6 +304,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
     /// @param token Address of token to rescue
     /// @param amount Amount of tokens to rescue
     function rescueTokens(address token, uint256 amount) external onlyOwner {
+        if (token == address(0)) revert ZeroAddress();
         uint256 balance = IERC20(token).balanceOf(address(this));
         uint256 excess;
         if (token == address(fairToken)) {
