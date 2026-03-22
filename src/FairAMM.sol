@@ -79,6 +79,8 @@ contract FairAMM is ReentrancyGuard, Ownable {
     error InsufficientExcess();
     /// @notice Thrown when token balance is insufficient for burn
     error InsufficientBurnBalance();
+    /// @notice Thrown when token balance is insufficient
+    error InsufficientTokenBalance();
 
     /// @notice Constructor initializes the AMM
     /// @param _fairToken Address of the FAIR token contract
@@ -127,7 +129,6 @@ contract FairAMM is ReentrancyGuard, Ownable {
 
         amountOut = _fairBalance - newFairBalance;
         if (amountOut < amountOutMin) revert InsufficientOutput();
-        if (amountOut > _fairBalance) revert InsufficientOutput();
         if (amountOut > fairToken.balanceOf(address(this))) revert InsufficientOutput();
 
         uint256 devFee = (fee * FEE_SHARE) / 100;
@@ -214,8 +215,11 @@ contract FairAMM is ReentrancyGuard, Ownable {
     function addFairLiquidity(uint256 amount) external {
         if (msg.sender != claimContract && msg.sender != owner()) revert Unauthorized();
         if (amount == 0) revert InvalidAmount();
-        uint256 newFairBalance = fairBalance + amount;
-        if (fairToken.balanceOf(address(this)) < newFairBalance) revert InsufficientOutput();
+        uint256 newFairBalance;
+        unchecked {
+            newFairBalance = fairBalance + amount;
+        }
+        if (fairToken.balanceOf(address(this)) < newFairBalance) revert InsufficientTokenBalance();
         fairBalance = newFairBalance;
         emit LiquidityAdded(msg.sender, amount);
     }

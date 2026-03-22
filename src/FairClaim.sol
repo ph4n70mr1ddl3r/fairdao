@@ -292,10 +292,13 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     function _distributeReferralRewards(address inviter, address claimant) internal returns (uint256 totalDistributed) {
         address currentInviter = inviter;
 
-        for (uint8 level = 0; level < MAX_REFERRAL_LEVELS && currentInviter != address(0); level++) {
+        for (uint8 level = 0; level < MAX_REFERRAL_LEVELS && currentInviter != address(0);) {
             fairToken.mint(currentInviter, REFERRAL_REWARD_PER_LEVEL);
             emit ReferralReward(currentInviter, claimant, REFERRAL_REWARD_PER_LEVEL, level);
-            totalDistributed += REFERRAL_REWARD_PER_LEVEL;
+            unchecked {
+                totalDistributed += REFERRAL_REWARD_PER_LEVEL;
+                ++level;
+            }
             currentInviter = inviterOf[currentInviter];
         }
     }
@@ -334,20 +337,20 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
     /// @param account Address to get chain for
     /// @return Array of inviter addresses from level 1 to max depth
     function getReferralChain(address account) external view returns (address[] memory) {
+        address[MAX_REFERRAL_LEVELS] memory tempChain;
         uint256 depth = 0;
         address current = inviterOf[account];
 
         while (current != address(0) && depth < MAX_REFERRAL_LEVELS) {
+            tempChain[depth] = current;
             depth++;
             current = inviterOf[current];
         }
 
         address[] memory chain = new address[](depth);
-        current = inviterOf[account];
-
-        for (uint256 i = 0; i < depth; i++) {
-            chain[i] = current;
-            current = inviterOf[current];
+        for (uint256 i = 0; i < depth;) {
+            chain[i] = tempChain[i];
+            unchecked { ++i; }
         }
 
         return chain;
