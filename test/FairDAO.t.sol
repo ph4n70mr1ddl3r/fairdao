@@ -5,6 +5,10 @@ import {Test} from "forge-std/Test.sol";
 import {FAIR} from "../src/FAIR.sol";
 import {FairAMM} from "../src/FairAMM.sol";
 import {FairClaim} from "../src/FairClaim.sol";
+import {FairGovernor} from "../src/FairGovernor.sol";
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
+import {IGovernor} from "@openzeppelin/contracts/governance/IGovernor.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 contract FairDAOTest is Test {
@@ -13,6 +17,8 @@ contract FairDAOTest is Test {
     FAIR public fair;
     FairAMM public amm;
     FairClaim public claim;
+    FairGovernor public governor;
+    TimelockController public timelock;
 
     address public owner = address(0x1);
     address public user1 = address(0x2);
@@ -638,6 +644,317 @@ contract FairDAOTest is Test {
         assertEq(chain.length, 2);
         assertEq(chain[0], localUser1);
         assertEq(chain[1], user0);
+    }
+
+    function test_Fair_BurnFrom() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+
+        vm.prank(user1);
+        claim.claim(proof);
+
+        uint256 balance = fair.balanceOf(user1);
+        assertTrue(balance > 0);
+
+        vm.prank(user1);
+        fair.approve(address(amm), balance / 2);
+
+        uint256 ammBalanceBefore = fair.balanceOf(address(amm));
+        vm.prank(user2);
+        vm.expectRevert(FAIR.Unauthorized.selector);
+        fair.burnFrom(user1, balance / 2);
+
+        vm.prank(address(amm));
+        fair.burnFrom(user1, balance / 2);
+
+        assertEq(fair.balanceOf(user1), balance - balance / 2);
+        assertEq(fair.balanceOf(address(amm)), ammBalanceBefore);
+    }
+
+    function test_Claim_PauseUnpause() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+
+        vm.prank(owner);
+        claim.pause();
+
+        vm.prank(user1);
+        vm.expectRevert();
+        claim.claim(proof);
+
+        vm.prank(owner);
+        claim.unpause();
+
+        vm.prank(user1);
+        claim.claim(proof);
+
+        assertTrue(claim.hasClaimed(user1));
+    }
+
+    function test_AMM_RescueTokens() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+
+        vm.prank(user1);
+        claim.claim(proof);
+
+        vm.deal(user2, 10 ether);
+        vm.prank(user2);
+        amm.swapEthForFair{value: 0.1 ether}(0);
+
+        uint256 ammFairBalance = fair.balanceOf(address(amm));
+        assertTrue(ammFairBalance > 0);
+
+        vm.prank(user1);
+        fair.transfer(address(amm), 10 * 1e18);
+
+        uint256 excess = fair.balanceOf(address(amm)) - amm.fairBalance();
+        assertEq(excess, 10 * 1e18);
+
+        vm.prank(owner);
+        vm.expectRevert(FairAMM.InsufficientExcess.selector);
+        amm.rescueTokens(address(fair), 20 * 1e18);
+
+        uint256 ownerBalanceBefore = fair.balanceOf(owner);
+        vm.prank(owner);
+        amm.rescueTokens(address(fair), 10 * 1e18);
+        assertEq(fair.balanceOf(owner), ownerBalanceBefore + 10 * 1e18);
+    }
+
+    function test_AMM_AddFairLiquidityOwnerOnly() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+
+        vm.prank(user1);
+        claim.claim(proof);
+
+        assertTrue(amm.fairBalance() > 0);
+
+        vm.prank(user1);
+        vm.expectRevert(FairAMM.Unauthorized.selector);
+        amm.addFairLiquidity(100 * 1e18);
+    }
+
+    function test_Governor_Deployment() public {
+        vm.startPrank(owner);
+
+        address[] memory proposers = new address[](0);
+        address[] memory executors = new address[](0);
+
+        timelock = new TimelockController(2 days, proposers, executors, owner);
+        governor = new FairGovernor(fair, timelock, 7200, 50400, 100 * 1e18, 4);
+
+        bytes32 proposerRole = timelock.PROPOSER_ROLE();
+        bytes32 executorRole = timelock.EXECUTOR_ROLE();
+
+        timelock.grantRole(proposerRole, address(governor));
+        timelock.grantRole(executorRole, address(governor));
+
+        vm.stopPrank();
+
+        assertEq(governor.name(), "FairDAO Governor");
+        assertEq(address(governor.fairToken()), address(fair));
+        assertEq(governor.votingDelay(), 7200);
+        assertEq(governor.votingPeriod(), 50400);
+        assertEq(governor.proposalThreshold(), 100 * 1e18);
+    }
+
+    function test_Governor_ProposalThreshold() public {
+        vm.startPrank(owner);
+
+        address[] memory proposers = new address[](0);
+        address[] memory executors = new address[](0);
+
+        timelock = new TimelockController(2 days, proposers, executors, owner);
+        governor = new FairGovernor(fair, timelock, 7200, 50400, 50 * 1e18, 4);
+
+        timelock.grantRole(timelock.PROPOSER_ROLE(), address(governor));
+        timelock.grantRole(timelock.EXECUTOR_ROLE(), address(governor));
+
+        vm.stopPrank();
+
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+
+        vm.prank(user1);
+        claim.claim(proof);
+
+        uint256 userBalance = fair.balanceOf(user1);
+        assertTrue(userBalance >= governor.proposalThreshold());
+
+        vm.prank(user1);
+        fair.delegate(user1);
+
+        vm.roll(block.number + 1);
+
+        address[] memory targets = new address[](1);
+        targets[0] = address(fair);
+        uint256[] memory values = new uint256[](1);
+        values[0] = 0;
+        bytes[] memory calldatas = new bytes[](1);
+        calldatas[0] = abi.encodeWithSelector(ERC20.transfer.selector, user2, 1e18);
+
+        vm.prank(user1);
+        governor.propose(targets, values, calldatas, "Test Proposal");
+
+        assertTrue(governor.proposalThreshold() > 0);
+        assertEq(governor.votingDelay(), 7200);
+        assertEq(governor.votingPeriod(), 50400);
+    }
+
+    function test_AMM_SwapRevertsOnInsufficientOutput() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+
+        vm.prank(user1);
+        claim.claim(proof);
+
+        vm.deal(user2, 10 ether);
+        vm.startPrank(user2);
+
+        uint256 amountOut = amm.getAmountOut(true, 0.1 ether);
+        vm.expectRevert(FairAMM.InsufficientOutput.selector);
+        amm.swapEthForFair{value: 0.1 ether}(amountOut + 1);
+        vm.stopPrank();
+    }
+
+    function test_Claim_InviteAlreadyUsed() public {
+        uint256 inviterKey = 0xabc123;
+        uint256 inviteeKey = 0xdef456;
+        address inviter = vm.addr(inviterKey);
+        address invitee = vm.addr(inviteeKey);
+
+        vm.startPrank(owner);
+        FAIR testFair = new FAIR(owner);
+        FairAMM testAmm = new FairAMM(address(testFair), owner, owner);
+
+        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(inviter))));
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(invitee))));
+        bytes32 leaf3 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
+
+        bytes32 testRoot = _hashPair(_hashPair(leaf1, leaf2), leaf3);
+
+        FairClaim testClaim = new FairClaim(address(testFair), payable(address(testAmm)), testRoot, 0, 0, owner);
+
+        testFair.setAMM(address(testAmm));
+        testFair.setClaimContract(address(testClaim));
+        testAmm.setClaimContract(address(testClaim));
+        vm.stopPrank();
+
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        testAmm.donate{value: 1 ether}();
+
+        bytes32[] memory inviterProof = new bytes32[](2);
+        inviterProof[0] = leaf2;
+        inviterProof[1] = leaf3;
+
+        vm.prank(inviter);
+        testClaim.claim(inviterProof);
+
+        bytes32[] memory inviteeProof = new bytes32[](2);
+        inviteeProof[0] = leaf1;
+        inviteeProof[1] = leaf3;
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 slotIndex = 0;
+
+        bytes32 digest = _hashTypedDataV4(
+            address(testClaim),
+            keccak256(
+                abi.encode(
+                    testClaim.INVITE_MESSAGE_TYPEHASH(),
+                    inviter,
+                    invitee,
+                    address(testClaim),
+                    block.chainid,
+                    slotIndex,
+                    deadline
+                )
+            )
+        );
+
+        bytes memory sigInviter = _sign(digest, inviterKey);
+        bytes memory sigInvitee = _sign(digest, inviteeKey);
+
+        vm.prank(invitee);
+        testClaim.claimWithInvite(inviteeProof, inviter, slotIndex, sigInviter, sigInvitee, deadline);
+
+        vm.expectRevert(FairClaim.AlreadyClaimed.selector);
+        vm.prank(invitee);
+        testClaim.claimWithInvite(inviteeProof, inviter, slotIndex, sigInviter, sigInvitee, deadline);
+    }
+
+    function test_Fair_SetAMMAlreadySet() public {
+        vm.prank(owner);
+        vm.expectRevert(FAIR.AlreadySet.selector);
+        fair.setAMM(address(amm));
+    }
+
+    function test_Fair_SetClaimContractAlreadySet() public {
+        vm.prank(owner);
+        vm.expectRevert(FAIR.AlreadySet.selector);
+        fair.setClaimContract(address(claim));
+    }
+
+    function test_Claim_RemainingInviteSlots() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+
+        vm.prank(user1);
+        claim.claim(proof);
+
+        assertEq(claim.remainingInviteSlots(user1), 4);
+        assertEq(claim.remainingInviteSlots(user2), 0);
     }
 
     function _hashTypedDataV4(address claimingContract, bytes32 structHash) internal view returns (bytes32) {

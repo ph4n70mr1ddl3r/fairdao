@@ -350,7 +350,9 @@ contract FairClaim is EIP712, ReentrancyGuard, Ownable, Pausable {
         address[] memory chain = new address[](depth);
         for (uint256 i = 0; i < depth;) {
             chain[i] = tempChain[i];
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         return chain;
