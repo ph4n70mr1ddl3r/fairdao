@@ -272,10 +272,14 @@ contract FairAMM is ReentrancyGuard, Ownable {
     /// @param token Address of token to rescue
     /// @param amount Amount of tokens to rescue
     function rescueTokens(address token, uint256 amount) external onlyOwner {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        uint256 excess;
         if (token == address(fairToken)) {
-            uint256 excess = fairToken.balanceOf(address(this)) - fairBalance;
-            if (amount > excess) revert InsufficientExcess();
+            excess = balance - fairBalance;
+        } else {
+            excess = balance;
         }
+        if (amount > excess) revert InsufficientExcess();
         if (!IERC20(token).transfer(owner(), amount)) revert TokenTransferFailed();
         emit TokensRescued(token, amount);
     }

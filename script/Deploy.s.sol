@@ -43,6 +43,15 @@ contract DeployFairDAO is Script {
     error InvalidPrivateKey();
     /// @notice Thrown when whitelist root is not set
     error WhitelistRootNotSet();
+    /// @notice Thrown when contract setup validation fails
+    error SetupValidationFailed();
+
+    /// @dev Validates that all contract addresses are properly configured
+    function _validateSetup(FAIR fair_, FairAMM amm_, FairClaim claim_) internal pure {
+        if (fair_.amm() != address(amm_)) revert SetupValidationFailed();
+        if (fair_.claimContract() != address(claim_)) revert SetupValidationFailed();
+        if (amm_.claimContract() != address(claim_)) revert SetupValidationFailed();
+    }
 
     /// @notice Deploys all FairDAO contracts
     /// @return fair The FAIR token contract
@@ -86,6 +95,8 @@ contract DeployFairDAO is Script {
         fair.setAMM(address(amm));
         fair.setClaimContract(address(claim));
         amm.setClaimContract(address(claim));
+
+        _validateSetup(fair, amm, claim);
 
         fair.transferOwnership(address(timelock));
         amm.transferOwnership(address(timelock));
