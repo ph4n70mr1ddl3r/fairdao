@@ -957,6 +957,74 @@ contract FairDAOTest is Test {
         assertEq(claim.remainingInviteSlots(user2), 0);
     }
 
+    function test_Claim_InvalidSignatureLength() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32 leaf1 = keccak256(bytes.concat(keccak256(abi.encode(user1))));
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+
+        vm.prank(user1);
+        claim.claim(proof);
+
+        bytes32[] memory proof2 = new bytes32[](2);
+        proof2[0] = leaf1;
+        proof2[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+
+        vm.prank(user2);
+        vm.expectRevert(FairClaim.InvalidSignatureLength.selector);
+        claim.claimWithInvite(proof2, user1, 0, "short", "short", block.timestamp + 1 hours);
+    }
+
+    function test_Claim_MaxProofLength() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32[] memory longProof = new bytes32[](33);
+        for (uint256 i = 0; i < 33; i++) {
+            longProof[i] = bytes32(i);
+        }
+
+        vm.prank(user1);
+        vm.expectRevert(FairClaim.InvalidProof.selector);
+        claim.claim(longProof);
+    }
+
+    function test_AMM_SwapFairForEthInsufficientOutput() public {
+        vm.deal(owner, 10 ether);
+        vm.prank(owner);
+        amm.donate{value: 1 ether}();
+
+        bytes32 leaf2 = keccak256(bytes.concat(keccak256(abi.encode(user2))));
+
+        bytes32[] memory proof = new bytes32[](2);
+        proof[0] = leaf2;
+        proof[1] = keccak256(bytes.concat(keccak256(abi.encode(user3))));
+
+        vm.prank(user1);
+        claim.claim(proof);
+
+        uint256 fairBalance = fair.balanceOf(user1);
+
+        vm.startPrank(user1);
+        fair.approve(address(amm), fairBalance);
+
+        uint256 ethOut = amm.getAmountOut(false, fairBalance);
+        vm.expectRevert(FairAMM.InsufficientOutput.selector);
+        amm.swapFairForEth(fairBalance, ethOut + 1 ether);
+        vm.stopPrank();
+    }
+
+    function test_FAIR_MaxSupply() public view {
+        assertEq(fair.MAX_SUPPLY(), 1_000_000 * 1e18);
+    }
+
     function _hashTypedDataV4(address claimingContract, bytes32 structHash) internal view returns (bytes32) {
         return keccak256(abi.encodePacked("\x19\x01", _domainSeparatorV4(claimingContract), structHash));
     }
