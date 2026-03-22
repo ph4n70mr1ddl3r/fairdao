@@ -81,6 +81,8 @@ contract FairAMM is ReentrancyGuard, Ownable {
     error InsufficientBurnBalance();
     /// @notice Thrown when token balance is insufficient
     error InsufficientTokenBalance();
+    /// @notice Thrown when trying to swap zero output
+    error ZeroOutput();
 
     /// @notice Constructor initializes the AMM
     /// @param _fairToken Address of the FAIR token contract
@@ -128,6 +130,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         uint256 newFairBalance = (k / newEthBalance) + 1;
 
         amountOut = _fairBalance - newFairBalance;
+        if (amountOut == 0) revert ZeroOutput();
         if (amountOut < amountOutMin) revert InsufficientOutput();
         if (amountOut > fairToken.balanceOf(address(this))) revert InsufficientTokenBalance();
 
@@ -168,6 +171,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         uint256 newEthBalance = (k / newFairBalance) + 1;
 
         amountOut = _ethBalance - newEthBalance;
+        if (amountOut == 0) revert ZeroOutput();
         if (amountOut < amountOutMin) revert InsufficientOutput();
         if (amountOut > address(this).balance) revert InsufficientOutput();
 
@@ -230,6 +234,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
     /// @return Expected output amount
     function getAmountOut(bool ethIn, uint256 amountIn) external view returns (uint256) {
         if (amountIn == 0) return 0;
+        if (ethBalance == 0 || fairBalance == 0) return 0;
 
         uint256 fee = (amountIn * SWAP_FEE_BASIS_POINTS) / BASIS_POINTS;
         uint256 amountInAfterFee;
@@ -240,12 +245,10 @@ contract FairAMM is ReentrancyGuard, Ownable {
         uint256 k = ethBalance * fairBalance;
 
         if (ethIn) {
-            if (fairBalance == 0) return 0;
             uint256 newEthBalance = ethBalance + amountInAfterFee;
             uint256 newFairBalance = (k / newEthBalance) + 1;
             return fairBalance > newFairBalance ? fairBalance - newFairBalance : 0;
         } else {
-            if (ethBalance == 0) return 0;
             uint256 newFairBalance = fairBalance + amountInAfterFee;
             uint256 newEthBalance = (k / newFairBalance) + 1;
             return ethBalance > newEthBalance ? ethBalance - newEthBalance : 0;
