@@ -280,7 +280,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         emit TokensRescued(token, amount);
     }
 
-    receive() external payable nonReentrant {
+    receive() external payable {
         if (msg.value == 0) revert InvalidAmount();
         ethBalance += msg.value;
         emit Donate(msg.sender, msg.value);
