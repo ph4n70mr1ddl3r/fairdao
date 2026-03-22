@@ -129,7 +129,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
 
         amountOut = _fairBalance - newFairBalance;
         if (amountOut < amountOutMin) revert InsufficientOutput();
-        if (amountOut > fairToken.balanceOf(address(this))) revert InsufficientOutput();
+        if (amountOut > fairToken.balanceOf(address(this))) revert InsufficientTokenBalance();
 
         uint256 devFee = (fee * FEE_SHARE) / 100;
         uint256 poolFee;
@@ -280,7 +280,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         emit TokensRescued(token, amount);
     }
 
-    receive() external payable {
+    receive() external payable nonReentrant {
         if (msg.value == 0) revert InvalidAmount();
         ethBalance += msg.value;
         emit Donate(msg.sender, msg.value);
