@@ -83,6 +83,8 @@ contract FairAMM is ReentrancyGuard, Ownable {
     error InsufficientTokenBalance();
     /// @notice Thrown when trying to swap zero output
     error ZeroOutput();
+    /// @notice Thrown when contract ETH balance is insufficient for swap
+    error InsufficientETHBalance();
 
     /// @notice Constructor initializes the AMM
     /// @param _fairToken Address of the FAIR token contract
@@ -173,7 +175,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         amountOut = _ethBalance - newEthBalance;
         if (amountOut == 0) revert ZeroOutput();
         if (amountOut < amountOutMin) revert InsufficientOutput();
-        if (amountOut > address(this).balance) revert InsufficientOutput();
+        if (amountOut > address(this).balance) revert InsufficientETHBalance();
 
         uint256 burnAmount = (fee * FEE_SHARE) / 100;
         uint256 poolFee;
@@ -278,6 +280,7 @@ contract FairAMM is ReentrancyGuard, Ownable {
         uint256 balance = IERC20(token).balanceOf(address(this));
         uint256 excess;
         if (token == address(fairToken)) {
+            if (balance < fairBalance) revert InsufficientExcess();
             excess = balance - fairBalance;
         } else {
             excess = balance;
